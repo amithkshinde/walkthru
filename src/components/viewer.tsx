@@ -105,6 +105,31 @@ export default function Viewer({
   const [speed, setSpeed] = useState(1);
   const [captions, setCaptions] = useState(false);
   const [search, setSearch] = useState("");
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcribeError, setTranscribeError] = useState<string | null>(null);
+
+  async function transcribeNow() {
+    setTranscribing(true);
+    setTranscribeError(null);
+    try {
+      const r = await fetch(`/api/videos/${video.id}/transcribe`, { method: "POST" });
+      const j = (await r.json()) as { transcript?: string; error?: string };
+      if (!r.ok || !j.transcript) throw new Error(j.error ?? "Transcription failed");
+      setVideo((v) => ({ ...v, ai_status: "processing" }));
+      await fetch(`/api/videos/${video.id}/ai`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ transcript: j.transcript }),
+      });
+      const { data } = await supabase.from("videos").select("summary, transcript, chapters, ai_status").eq("id", video.id).single();
+      if (data) setVideo((v) => ({ ...v, ...(data as Partial<ViewerVideo>) }));
+    } catch (e) {
+      setTranscribeError(e instanceof Error ? e.message : "Transcription failed");
+      setVideo((v) => ({ ...v, ai_status: "none" }));
+    } finally {
+      setTranscribing(false);
+    }
+  }
 
   useEffect(() => {
     if (!userName) {
@@ -244,6 +269,13 @@ export default function Viewer({
       try {
         localStorage.setItem("walkthru:name", authorName);
       } catch {}
+    }
+    if (!isOwner) {
+      fetch("/api/notify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ commentId: (data as Comment).id }),
+      }).catch(() => {});
     }
     setComments((c) => [...c, data as Comment].sort((a, b) => a.timestamp_seconds - b.timestamp_seconds));
     setBody("");
@@ -507,6 +539,15 @@ export default function Viewer({
               <p className="max-w-prose leading-relaxed text-muted">
                 This recording has no transcript. Transcripts are captured live while recording in Chrome or Edge with
                 the microphone on.
+                {isOwner && (
+                  <>
+                    {" "}
+                    <button type="button" onClick={transcribeNow} disabled={transcribing} className="font-medium text-brand underline disabled:opacity-60">
+                      {transcribing ? "Transcribing" : "Transcribe it now"}
+                    </button>
+                    {transcribeError && <span className="ml-2 text-record">{transcribeError}</span>}
+                  </>
+                )}
               </p>
             ) : tab === "summary" ? (
               video.summary ? (

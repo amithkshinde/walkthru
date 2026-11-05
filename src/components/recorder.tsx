@@ -601,6 +601,20 @@ export default function Recorder() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ transcript }),
         }).catch(() => {});
+      } else {
+        // No live transcript (unsupported browser or mic off): try server transcription.
+        fetch(`/api/videos/${id}/transcribe`, { method: "POST" })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((j: { transcript?: string } | null) =>
+            j?.transcript
+              ? fetch(`/api/videos/${id}/ai`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ transcript: j.transcript }),
+                })
+              : null,
+          )
+          .catch(() => {});
       }
 
       track("recording_saved", { trimmed });
