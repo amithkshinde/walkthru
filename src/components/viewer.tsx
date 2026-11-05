@@ -5,7 +5,7 @@ import { Check, Download, Eye, ExternalLink, Link2, Loader2, MessageSquare, Send
 import AiDocs, { type AiOutputs } from "@/components/ai-docs";
 import InsightsPanel, { type ViewRow } from "@/components/insights-panel";
 import AskVideo from "@/components/ask-video";
-import SharePanel from "@/components/share-panel";
+import SharePanel, { type AccessRequest } from "@/components/share-panel";
 import { track } from "@vercel/analytics";
 import { createClient } from "@/lib/supabase/client";
 import { formatTime, timeAgo } from "@/lib/format";
@@ -29,6 +29,7 @@ export interface Chapter {
   title: string;
 }
 export type { AiOutputs, ViewRow };
+export type { AccessRequest };
 export interface ViewerVideo {
   id: string;
   title: string;
@@ -70,6 +71,7 @@ export default function Viewer({
   hasPassword,
   views: viewRows,
   shareEmails,
+  requests,
 }: {
   video: ViewerVideo;
   initialComments: Comment[];
@@ -81,6 +83,7 @@ export default function Viewer({
   hasPassword: boolean;
   views: ViewRow[];
   shareEmails: string[];
+  requests: AccessRequest[];
 }) {
   const supabase = useMemo(() => createClient(unlockToken ?? undefined), [unlockToken]);
   const [ended, setEnded] = useState(false);
@@ -502,6 +505,11 @@ export default function Viewer({
                 }`}
               >
                 {t === "docs" ? "Documents" : t === "ask" ? "Ask" : t}
+                {t === "share" && requests.some((r) => r.status === "pending") && (
+                  <span className="ml-1.5 rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-semibold text-on-brand">
+                    {requests.filter((r) => r.status === "pending").length}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -529,6 +537,7 @@ export default function Viewer({
                 expiresAt={video.expires_at}
                 requireSignin={video.require_signin}
                 emails={shareEmails}
+                requests={requests}
                 description={video.description}
               />
             ) : video.ai_status === "processing" ? (

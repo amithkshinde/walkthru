@@ -4,6 +4,7 @@ import { Lock, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { resolveVideoAccess, fileSlug, UUID } from "@/lib/video-access";
 import Logo from "@/components/logo";
+import RequestAccess from "@/components/request-access";
 import UnlockForm from "@/components/unlock-form";
 import Viewer, { type AiOutputs, type Chapter, type Comment, type Reaction, type ViewRow } from "@/components/viewer";
 
@@ -58,6 +59,7 @@ export default async function VideoPage({ params }: Params) {
         <div className="mx-auto mt-20 w-full max-w-sm px-4 text-center">
           <h1 className="text-xl font-semibold tracking-tight">{copy[0]}</h1>
           <p className="mt-1.5 text-sm text-muted">{copy[1]}</p>
+          {access === "restricted" && <RequestAccess videoId={id} email={user?.email ?? null} name={(user?.user_metadata?.full_name as string | undefined) ?? null} />}
           {access === "signin" && (
             <Link href={`/login?next=/v/${id}`} className="btn btn-primary mt-5">
               Sign in
@@ -76,7 +78,8 @@ export default async function VideoPage({ params }: Params) {
             <EyeOff className="h-5 w-5 text-muted" aria-hidden />
           </div>
           <h1 className="mt-5 text-xl font-semibold tracking-tight">This video is private</h1>
-          <p className="mt-1.5 text-sm text-muted">Only its owner can watch it. Ask them to share it with you.</p>
+          <p className="mt-1.5 text-sm text-muted">Only its owner can watch it. You can ask them for access.</p>
+          <RequestAccess videoId={id} email={user?.email ?? null} name={(user?.user_metadata?.full_name as string | undefined) ?? null} />
         </div>
       </Shell>
     );
@@ -138,8 +141,9 @@ export default async function VideoPage({ params }: Params) {
   let views: ViewRow[] = [];
   let hasPassword = false;
   let shareEmails: string[] = [];
+  let requests: { id: string; email: string; name: string | null; message: string | null; status: string; created_at: string }[] = [];
   if (isOwner) {
-    const [{ data: viewRows }, { data: pw }, { data: shares }] = await Promise.all([
+    const [{ data: viewRows }, { data: pw }, { data: shares }, { data: reqs }] = await Promise.all([
       supabase
         .from("video_views")
         .select("id, viewer_name, watched_seconds, created_at, updated_at")
@@ -148,7 +152,9 @@ export default async function VideoPage({ params }: Params) {
         .limit(200),
       supabase.rpc("video_has_password", { vid: id }),
       supabase.from("video_shares").select("email").eq("video_id", id),
+      supabase.from("video_access_requests").select("id, email, name, message, status, created_at").eq("video_id", id).order("created_at", { ascending: false }),
     ]);
+    requests = reqs ?? [];
     shareEmails = (shares ?? []).map((r) => r.email as string);
     views = (viewRows as ViewRow[] | null) ?? [];
     hasPassword = !!pw;
@@ -181,6 +187,7 @@ export default async function VideoPage({ params }: Params) {
           require_signin: video.require_signin,
         }}
         shareEmails={shareEmails}
+        requests={requests}
         initialComments={(comments as Comment[] | null) ?? []}
         initialReactions={(reactions as Reaction[] | null) ?? []}
         userId={user?.id ?? null}

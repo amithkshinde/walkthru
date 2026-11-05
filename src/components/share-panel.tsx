@@ -4,7 +4,17 @@ import { useMemo, useState } from "react";
 import { Check, Copy, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
+export interface AccessRequest {
+  id: string;
+  email: string;
+  name: string | null;
+  message: string | null;
+  status: string;
+  created_at: string;
+}
+
 interface Props {
+  requests: AccessRequest[];
   videoId: string;
   visibility: "link" | "private";
   hasPassword: boolean;
@@ -32,6 +42,7 @@ export default function SharePanel(p: Props) {
   const [signin, setSignin] = useState(p.requireSignin);
   const [emails, setEmails] = useState<string[]>(p.emails);
   const [newEmail, setNewEmail] = useState("");
+  const [reqs, setReqs] = useState<AccessRequest[]>(p.requests);
   const [desc, setDesc] = useState(p.description ?? "");
 
   const embed = `<iframe src="${typeof window === "undefined" ? "" : window.location.origin}/embed/${p.videoId}" width="640" height="360" style="border:0" allow="fullscreen" allowfullscreen></iframe>`;
@@ -93,6 +104,26 @@ export default function SharePanel(p: Props) {
     const { error } = await supabase.from("video_shares").delete().eq("video_id", p.videoId).eq("email", em);
     if (!error) setEmails((l) => l.filter((x) => x !== em));
   }
+  async function decide(r: AccessRequest, approve: boolean) {
+    setBusy(r.id);
+    if (approve) {
+      const { error: shareErr } = await supabase.from("video_shares").upsert({ video_id: p.videoId, email: r.email.toLowerCase() });
+      if (shareErr) {
+        setBusy(null);
+        return say("err", "Could not grant access.");
+      }
+      setEmails((l) => (l.includes(r.email.toLowerCase()) ? l : [...l, r.email.toLowerCase()]));
+      if (visibility === "private") {
+        if (await update({ visibility: "link" }, "vis")) setVisibility("link");
+      }
+    }
+    const { error } = await supabase.from("video_access_requests").update({ status: approve ? "approved" : "declined" }).eq("id", r.id);
+    setBusy(null);
+    if (error) return say("err", "Could not update the request.");
+    setReqs((l) => l.map((x) => (x.id === r.id ? { ...x, status: approve ? "approved" : "declined" } : x)));
+    say("ok", approve ? `${r.email} can now watch after signing in` : "Declined");
+  }
+
   async function saveDesc() {
     await update({ description: desc.trim() || null }, "desc");
   }
@@ -112,6 +143,34 @@ export default function SharePanel(p: Props) {
 
   return (
     <div className="space-y-6 text-sm">
+      {reqs.some((r) => r.status === "pending") && (
+        <div className="rounded-lg border border-brand/40 bg-brand-soft p-4">
+          <p className="font-medium">Access requests</p>
+          <ul className="mt-2 divide-y divide-border">
+            {reqs
+              .filter((r) => r.status === "pending")
+              .map((r) => (
+                <li key={r.id} className="flex flex-wrap items-center gap-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate">
+                      {r.name ? `${r.name} ` : ""}
+                      <span className="text-muted">{r.email}</span>
+                    </p>
+                    {r.message && <p className="mt-0.5 text-xs text-muted">{r.message}</p>}
+                  </div>
+                  <button type="button" disabled={busy === r.id} onClick={() => decide(r, true)} className="btn btn-primary btn-sm">
+                    Approve
+                  </button>
+                  <button type="button" disabled={busy === r.id} onClick={() => decide(r, false)} className="btn btn-ghost btn-sm">
+                    Decline
+                  </button>
+                </li>
+              ))}
+          </ul>
+          {visibility === "private" && <p className="mt-2 text-xs text-muted">Approving switches the video to link access, limited to the people you have approved.</p>}
+        </div>
+      )}
+
       <fieldset>
         <legend className="font-medium">Who can watch</legend>
         <div className="mt-2 flex gap-2">
