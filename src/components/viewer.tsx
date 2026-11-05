@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Download, Eye, ExternalLink, Link2, Loader2, MessageSquare, Send, Sparkles, Trash2 } from "lucide-react";
+import { Check, Download, Eye, Link2, Loader2, MessageSquare, Send, Sparkles, Trash2 } from "lucide-react";
 import AiDocs, { type AiOutputs } from "@/components/ai-docs";
 import InsightsPanel, { type ViewRow } from "@/components/insights-panel";
 import AskVideo from "@/components/ask-video";
@@ -383,13 +383,6 @@ export default function Viewer({
               <p className="max-w-[90%] rounded bg-black/75 px-3 py-1.5 text-center text-sm text-white">{captionLine}</p>
             </div>
           )}
-          {ended && video.cta_url && video.cta_label && (
-            <div className="anim-fade absolute inset-x-0 top-0 grid place-items-center bg-black/60" style={{ bottom: "3.5rem" }}>
-              <a href={video.cta_url} target="_blank" rel="noopener noreferrer" className="btn btn-lg btn-primary">
-                {video.cta_label} <ExternalLink className="h-4 w-4" aria-hidden />
-              </a>
-            </div>
-          )}
         </div>
 
         {/* Comment markers on the timeline */}
@@ -424,11 +417,6 @@ export default function Viewer({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {video.cta_url && video.cta_label && /^https?:\/\//i.test(video.cta_url) && (
-              <a href={video.cta_url} target="_blank" rel="noopener noreferrer" className="btn btn-primary">
-                {video.cta_label} <ExternalLink className="h-4 w-4" aria-hidden />
-              </a>
-            )}
             {video.downloadUrl && (
               <a href={video.downloadUrl} className="btn btn-secondary">
                 <Download className="h-4 w-4" aria-hidden /> Download
@@ -532,8 +520,6 @@ export default function Viewer({
                 visibility={video.visibility}
                 hasPassword={hasPassword}
                 allowDownload={video.allow_download}
-                ctaLabel={video.cta_label}
-                ctaUrl={video.cta_url}
                 expiresAt={video.expires_at}
                 requireSignin={video.require_signin}
                 emails={shareEmails}

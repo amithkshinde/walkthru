@@ -19,8 +19,6 @@ interface Props {
   visibility: "link" | "private";
   hasPassword: boolean;
   allowDownload: boolean;
-  ctaLabel: string | null;
-  ctaUrl: string | null;
   expiresAt: string | null;
   requireSignin: boolean;
   emails: string[];
@@ -33,8 +31,6 @@ export default function SharePanel(p: Props) {
   const [hasPassword, setHasPassword] = useState(p.hasPassword);
   const [allowDownload, setAllowDownload] = useState(p.allowDownload);
   const [password, setPassword] = useState("");
-  const [label, setLabel] = useState(p.ctaLabel ?? "");
-  const [url, setUrl] = useState(p.ctaUrl ?? "");
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -126,19 +122,6 @@ export default function SharePanel(p: Props) {
 
   async function saveDesc() {
     await update({ description: desc.trim() || null }, "desc");
-  }
-
-  async function saveCta(e: React.FormEvent) {
-    e.preventDefault();
-    const l = label.trim();
-    const u = url.trim();
-    if (!l && !u) {
-      await update({ cta_label: null, cta_url: null }, "cta");
-      return;
-    }
-    if (!l || l.length > 40) return say("err", "Button text must be 1 to 40 characters.");
-    if (!/^https?:\/\//i.test(u) || u.length > 500) return say("err", "Link must start with http:// or https://");
-    await update({ cta_label: l, cta_url: u }, "cta");
   }
 
   return (
@@ -274,18 +257,6 @@ export default function SharePanel(p: Props) {
         <input type="checkbox" checked={allowDownload} onChange={(e) => toggleDownload(e.target.checked)} className="h-4 w-4 accent-[var(--brand)]" />
         Let viewers download the video
       </label>
-
-      <form onSubmit={saveCta} className="space-y-2">
-        <p className="font-medium">Call to action</p>
-        <div className="grid gap-2 sm:grid-cols-[12rem_1fr_auto]">
-          <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={40} placeholder="Button text" aria-label="Button text" className="field" />
-          <input value={url} onChange={(e) => setUrl(e.target.value)} maxLength={500} placeholder="https://example.com" aria-label="Button link" className="field" />
-          <button type="submit" disabled={busy === "cta"} className="btn btn-secondary">
-            Save
-          </button>
-        </div>
-        <p className="text-xs text-muted">Shown under the video and when it ends. Leave both empty to remove it.</p>
-      </form>
 
       <div>
         <p className="font-medium">Embed</p>
