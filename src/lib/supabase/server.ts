@@ -1,13 +1,18 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
-export async function createClient() {
+/**
+ * Server Supabase client. Pass an unlock token to read a password-protected
+ * video; it is sent as a header that the database checks in its row policies.
+ */
+export async function createClient(unlockToken?: string) {
   const cookieStore = await cookies();
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
+      ...(unlockToken ? { global: { headers: { "x-wt-unlock": unlockToken } } } : {}),
       cookies: {
         getAll() {
           return cookieStore.getAll();

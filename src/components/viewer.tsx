@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Eye, Link2, Loader2, MessageSquare, Send, Sparkles, Trash2 } from "lucide-react";
+import { Check, Download, Eye, ExternalLink, Link2, Loader2, MessageSquare, Send, Sparkles, Trash2 } from "lucide-react";
+import AiDocs, { type AiOutputs } from "@/components/ai-docs";
+import InsightsPanel, { type ViewRow } from "@/components/insights-panel";
+import SharePanel from "@/components/share-panel";
 import { createClient } from "@/lib/supabase/client";
 import { formatTime, timeAgo } from "@/lib/format";
 
@@ -22,10 +25,17 @@ export interface Chapter {
   start: number;
   title: string;
 }
+export type { AiOutputs, ViewRow };
 export interface ViewerVideo {
   id: string;
   title: string;
   url: string;
+  downloadUrl: string | null;
+  visibility: "link" | "private";
+  cta_label: string | null;
+  cta_url: string | null;
+  allow_download: boolean;
+  ai_outputs: AiOutputs;
   duration_seconds: number;
   view_count: number;
   created_at: string;
@@ -36,7 +46,7 @@ export interface ViewerVideo {
 }
 
 const EMOJIS = ["👍", "❤️", "😂", "🎉", "👀"];
-type Tab = "summary" | "chapters" | "transcript";
+type Tab = "summary" | "chapters" | "transcript" | "docs" | "insights" | "share";
 
 function parseStamp(s: string): number {
   return s.split(":").reduce((acc, part) => acc * 60 + Number(part), 0);
@@ -49,6 +59,9 @@ export default function Viewer({
   userId,
   userName,
   isOwner,
+  unlockToken,
+  hasPassword,
+  views: viewRows,
 }: {
   video: ViewerVideo;
   initialComments: Comment[];
@@ -56,8 +69,15 @@ export default function Viewer({
   userId: string | null;
   userName: string | null;
   isOwner: boolean;
+  unlockToken: string | null;
+  hasPassword: boolean;
+  views: ViewRow[];
 }) {
-  const supabase = useMemo(() => createClient(), []);
+  const supabase = useMemo(() => createClient(unlockToken ?? undefined), [unlockToken]);
+  const [ended, setEnded] = useState(false);
+  const sessionId = useRef<string>("");
+  const watchedSet = useRef<Set<number>>(new Set());
+  const lastSent = useRef(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [video, setVideo] = useState(initialVideo);
   const [comments, setComments] = useState(initialComments);
@@ -97,6 +117,27 @@ export default function Viewer({
     }, 4000);
     return () => clearInterval(t);
   }, [video.ai_status, video.id, supabase]);
+
+  const sendProgress = useCallback(() => {
+    if (isOwner) return;
+    const n = watchedSet.current.size;
+    if (n === 0 || n === lastSent.current) return;
+    lastSent.current = n;
+    if (!sessionId.current) sessionId.current = crypto.randomUUID();
+    supabase
+      .rpc("record_progress", { vid: initialVideo.id, sid: sessionId.current, watched: n, vname: userName ?? (name.trim() || null) })
+      .then(() => {});
+  }, [isOwner, supabase, initialVideo.id, userName, name]);
+
+  useEffect(() => {
+    const t = setInterval(sendProgress, 5000);
+    const onHide = () => sendProgress();
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onHide);
+    };
+  }, [sendProgress]);
 
   const seek = useCallback((t: number) => {
     const el = videoRef.current;
@@ -200,7 +241,7 @@ export default function Viewer({
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_22.5rem]">
       <section className="min-w-0">
-        <div className="overflow-hidden rounded-card bg-black shadow-panel">
+        <div className="relative overflow-hidden rounded-card bg-black shadow-panel">
           <video
             ref={videoRef}
             src={video.url}
@@ -208,13 +249,30 @@ export default function Viewer({
             playsInline
             preload="metadata"
             onPlay={onPlay}
-            onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)}
+            onPlaying={() => setEnded(false)}
+            onPause={sendProgress}
+            onEnded={() => {
+              setEnded(true);
+              sendProgress();
+            }}
+            onTimeUpdate={(e) => {
+              const t = e.currentTarget.currentTime;
+              setNow(t);
+              if (!e.currentTarget.paused) watchedSet.current.add(Math.floor(t));
+            }}
             onLoadedMetadata={(e) => {
               const d = e.currentTarget.duration;
               if (Number.isFinite(d) && d > 0) setDuration(d);
             }}
             className="aspect-video w-full"
           />
+          {ended && video.cta_url && video.cta_label && (
+            <div className="anim-fade absolute inset-x-0 top-0 grid place-items-center bg-black/60" style={{ bottom: "3.5rem" }}>
+              <a href={video.cta_url} target="_blank" rel="noopener noreferrer" className="btn btn-lg btn-primary">
+                {video.cta_label} <ExternalLink className="h-4 w-4" aria-hidden />
+              </a>
+            </div>
+          )}
         </div>
 
         {/* Comment markers on the timeline */}
@@ -247,10 +305,22 @@ export default function Viewer({
               </span>
             </div>
           </div>
-          <button type="button" onClick={copyLink} className="btn btn-secondary">
-            {copied ? <Check className="anim-pop h-4 w-4 text-success" /> : <Link2 className="h-4 w-4" />}
-            {copied ? "Link copied" : "Copy link"}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {video.cta_url && video.cta_label && /^https?:\/\//i.test(video.cta_url) && (
+              <a href={video.cta_url} target="_blank" rel="noopener noreferrer" className="btn btn-primary">
+                {video.cta_label} <ExternalLink className="h-4 w-4" aria-hidden />
+              </a>
+            )}
+            {video.downloadUrl && (
+              <a href={video.downloadUrl} className="btn btn-secondary">
+                <Download className="h-4 w-4" aria-hidden /> Download
+              </a>
+            )}
+            <button type="button" onClick={copyLink} className="btn btn-secondary">
+              {copied ? <Check className="anim-pop h-4 w-4 text-success" /> : <Link2 className="h-4 w-4" />}
+              {copied ? "Link copied" : "Copy link"}
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2" role="group" aria-label="Reactions">
@@ -273,11 +343,11 @@ export default function Viewer({
 
         {/* AI panel */}
         <div className="panel mt-8">
-          <div role="tablist" aria-label="AI notes" className="flex items-center gap-1 border-b border-border px-3 pt-2">
+          <div role="tablist" aria-label="AI notes" className="flex flex-wrap items-center gap-1 border-b border-border px-3 pt-2">
             <span className="mr-2 flex items-center gap-1.5 px-1 pb-2.5 text-sm font-semibold">
               <Sparkles className="h-4 w-4 text-brand" aria-hidden /> AI notes
             </span>
-            {(["summary", "chapters", "transcript"] as Tab[]).map((t) => (
+            {((isOwner ? ["summary", "chapters", "transcript", "docs", "insights", "share"] : ["summary", "chapters", "transcript", "docs"]) as Tab[]).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -290,12 +360,31 @@ export default function Viewer({
                     : "border-transparent text-muted hover:text-foreground"
                 }`}
               >
-                {t}
+                {t === "docs" ? "Documents" : t}
               </button>
             ))}
           </div>
           <div key={tab} className="anim-fade p-5 text-sm">
-            {video.ai_status === "processing" ? (
+            {tab === "docs" ? (
+              <AiDocs
+                videoId={video.id}
+                title={video.title}
+                hasTranscript={!!video.transcript}
+                isOwner={isOwner}
+                initial={video.ai_outputs}
+              />
+            ) : tab === "insights" ? (
+              <InsightsPanel views={viewRows} duration={duration} totalViews={views} />
+            ) : tab === "share" ? (
+              <SharePanel
+                videoId={video.id}
+                visibility={video.visibility}
+                hasPassword={hasPassword}
+                allowDownload={video.allow_download}
+                ctaLabel={video.cta_label}
+                ctaUrl={video.cta_url}
+              />
+            ) : video.ai_status === "processing" ? (
               <p className="flex items-center gap-2 text-muted">
                 <Loader2 className="h-4 w-4 animate-spin" /> Generating summary and chapters
               </p>

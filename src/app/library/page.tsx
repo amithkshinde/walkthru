@@ -22,11 +22,13 @@ export default async function LibraryPage() {
     .eq("owner_id", user.id)
     .order("created_at", { ascending: false });
 
+  const paths = (videos ?? []).map((v) => v.storage_path).filter((x): x is string => !!x);
+  const signed = paths.length ? await supabase.storage.from("recordings").createSignedUrls(paths, 60 * 60) : { data: [] };
+  const urlByPath = new Map((signed.data ?? []).map((r) => [r.path, r.signedUrl]));
+
   const items = (videos ?? []).map((v) => ({
     ...v,
-    url: v.storage_path
-      ? supabase.storage.from("recordings").getPublicUrl(v.storage_path).data.publicUrl
-      : null,
+    url: (v.storage_path && urlByPath.get(v.storage_path)) || null,
     commentCount: (v.comments as unknown as { count: number }[] | null)?.[0]?.count ?? 0,
   }));
 
