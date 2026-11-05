@@ -198,13 +198,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   await supabase.from("videos").update({ transcript, ai_status: "processing" }).eq("id", id);
 
-  let result: AiResult;
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  try {
-    result = apiKey ? await withClaude(transcript, apiKey) : fallback(transcript);
-  } catch {
-    result = fallback(transcript);
-  }
+  const [resultSettled, notesSettled] = await Promise.allSettled([
+    apiKey ? withClaude(transcript, apiKey) : Promise.resolve(fallback(transcript)),
+    apiKey ? outputWithClaude("notes", video.title, transcript.slice(0, 60000), apiKey) : Promise.resolve(null),
+  ]);
+  const result: AiResult = resultSettled.status === "fulfilled" ? resultSettled.value : fallback(transcript);
+  const notesClaude = notesSettled.status === "fulfilled" ? notesSettled.value : null;
+  const notes = {
+    content: notesClaude ?? fallbackOutput("notes", video.title, transcript),
+    generated_at: new Date().toISOString(),
+    used_claude: !!notesClaude,
+  };
+  const outputs = { ...((video.ai_outputs as Record<string, unknown> | null) ?? {}), notes };
 
   const { error } = await supabase
     .from("videos")
@@ -212,6 +218,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       summary: result.summary,
       chapters: result.chapters,
       ai_status: "done",
+      ai_outputs: outputs,
       ...(result.title && /^Recording\b/.test(video.title) ? { title: result.title } : {}),
     })
     .eq("id", id);

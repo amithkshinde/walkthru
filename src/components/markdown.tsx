@@ -1,13 +1,26 @@
 import { Fragment } from "react";
 
-function inline(text: string) {
-  return text.split(/(\*\*[^*]+\*\*)/g).map((p, i) =>
-    p.startsWith("**") && p.endsWith("**") && p.length > 4 ? <strong key={i}>{p.slice(2, -2)}</strong> : <Fragment key={i}>{p}</Fragment>,
-  );
+function toSeconds(stamp: string) {
+  return stamp.split(":").reduce((a, p) => a * 60 + Number(p), 0);
+}
+
+function inline(text: string, onSeek?: (t: number) => void) {
+  return text.split(/(\*\*[^*]+\*\*|\[\d+(?::\d+)+\])/g).map((p, i) => {
+    if (p.startsWith("**") && p.endsWith("**") && p.length > 4) return <strong key={i}>{p.slice(2, -2)}</strong>;
+    const m = p.match(/^\[(\d+(?::\d+)+)\]$/);
+    if (m && onSeek) {
+      return (
+        <button key={i} type="button" onClick={() => onSeek(toSeconds(m[1]))} className="mx-0.5 rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs tabular-nums text-brand hover:bg-brand hover:text-on-brand">
+          {m[1]}
+        </button>
+      );
+    }
+    return <Fragment key={i}>{p}</Fragment>;
+  });
 }
 
 /** Small, safe markdown subset: headings, bullets, numbered lists, checkboxes, bold. No raw HTML. */
-export default function Markdown({ source }: { source: string }) {
+export default function Markdown({ source, onSeek }: { source: string; onSeek?: (t: number) => void }) {
   const lines = source.split("\n");
   const out: React.ReactNode[] = [];
   let list: { ordered: boolean; items: React.ReactNode[] } | null = null;
@@ -33,7 +46,7 @@ export default function Markdown({ source }: { source: string }) {
       const cls = h[1].length === 1 ? "mt-1 text-lg font-semibold" : "mt-4 text-[15px] font-semibold";
       out.push(
         <p key={out.length} className={cls} role="heading" aria-level={h[1].length + 1}>
-          {inline(h[2])}
+          {inline(h[2], onSeek)}
         </p>,
       );
     } else if (ul || ol) {
@@ -48,10 +61,10 @@ export default function Markdown({ source }: { source: string }) {
         box ? (
           <span className="flex items-baseline gap-2">
             <input type="checkbox" defaultChecked={box[1] !== " "} disabled className="translate-y-0.5" aria-hidden />
-            {inline(box[2])}
+            {inline(box[2], onSeek)}
           </span>
         ) : (
-          inline(text)
+          inline(text, onSeek)
         ),
       );
     } else if (!line.trim()) {
@@ -60,7 +73,7 @@ export default function Markdown({ source }: { source: string }) {
       flush();
       out.push(
         <p key={out.length} className="my-2 leading-relaxed">
-          {inline(line)}
+          {inline(line, onSeek)}
         </p>,
       );
     }

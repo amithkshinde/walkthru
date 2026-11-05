@@ -128,7 +128,7 @@ export default function Viewer({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ transcript: j.transcript }),
       });
-      const { data } = await supabase.from("videos").select("summary, transcript, chapters, ai_status").eq("id", video.id).single();
+      const { data } = await supabase.from("videos").select("summary, transcript, chapters, ai_status, ai_outputs").eq("id", video.id).single();
       if (data) setVideo((v) => ({ ...v, ...(data as Partial<ViewerVideo>) }));
     } catch (e) {
       setTranscribeError(e instanceof Error ? e.message : "Transcription failed");
@@ -153,7 +153,7 @@ export default function Viewer({
     const t = setInterval(async () => {
       const { data } = await supabase
         .from("videos")
-        .select("summary, transcript, chapters, ai_status")
+        .select("summary, transcript, chapters, ai_status, ai_outputs")
         .eq("id", video.id)
         .single();
       if (data) {
@@ -475,7 +475,7 @@ export default function Viewer({
                     : "border-transparent text-muted hover:text-foreground"
                 }`}
               >
-                {t === "docs" ? "Documents" : t === "ask" ? "Ask" : t}
+                {t === "docs" ? "Documents" : t === "ask" ? "Chat" : t}
               </button>
             ))}
           </div>
@@ -489,6 +489,7 @@ export default function Viewer({
                 hasTranscript={!!video.transcript}
                 isOwner={isOwner}
                 initial={video.ai_outputs}
+                key={video.ai_status}
               />
             ) : tab === "insights" ? (
               <InsightsPanel views={viewRows} duration={duration} totalViews={views} />
