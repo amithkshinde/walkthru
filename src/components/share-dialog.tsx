@@ -319,6 +319,7 @@ export default function ShareDialog(p: Props) {
           </div>
 
           <div className="mt-5 space-y-4 text-sm">
+              <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
               <label className="flex items-center gap-2.5">
                 <input
                   type="checkbox"
@@ -341,6 +342,7 @@ export default function ShareDialog(p: Props) {
                 />
                 Let viewers download the video
               </label>
+              </div>
 
               <button type="button" onClick={() => copy("embed")} className="btn btn-secondary btn-sm">
                 {copied === "embed" ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
