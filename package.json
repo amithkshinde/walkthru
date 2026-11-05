@@ -11,6 +11,8 @@
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "fix-webm-duration": "^1.0.6",
     "geist": "^1.9.0",
     "lucide-react": "^1.66.0",

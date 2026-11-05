@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 export const maxDuration = 60;
 
 type Chapter = { start: number; title: string };
-type AiResult = { summary: string; chapters: Chapter[] };
+type AiResult = { summary: string; chapters: Chapter[]; title?: string };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_TRANSCRIPT = 60_000;
@@ -50,7 +50,8 @@ ${transcript}
 </transcript>
 
 Return ONLY a JSON object, no other text, in this exact shape:
-{"summary": "2-4 plain sentences describing what the recording covers and any decisions or requests",
+{"title": "a specific 3-8 word title, no quotes",
+ "summary": "2-4 plain sentences describing what the recording covers and any decisions or requests",
  "chapters": [{"start": <seconds as integer, taken from the transcript timestamps>, "title": "<3-7 word title>"}]}
 Use between 2 and 8 chapters, in time order, the first at or near 0.`;
 
@@ -80,10 +81,10 @@ Use between 2 and 8 chapters, in time order, the first at or near 0.`;
     .map((c) => ({ start: Math.max(0, Math.floor(Number(c.start))), title: c.title.slice(0, 80) }))
     .sort((a, b) => a.start - b.start)
     .slice(0, 8);
-  return { summary: String(parsed.summary ?? "").slice(0, 1200), chapters };
+  return { summary: String(parsed.summary ?? "").slice(0, 1200), chapters, title: typeof parsed.title === "string" ? parsed.title.replace(/["\n]/g, "").slice(0, 80) : undefined };
 }
 
-const KINDS = ["notes", "mom", "sop", "ticket", "doc"] as const;
+const KINDS = ["notes", "mom", "sop", "ticket", "doc", "actions"] as const;
 type Kind = (typeof KINDS)[number];
 
 const KIND_PROMPTS: Record<Kind, string> = {
@@ -91,6 +92,7 @@ const KIND_PROMPTS: Record<Kind, string> = {
   mom: "Write minutes of meeting in Markdown with these sections: 'Summary', 'Discussion' (bullets), 'Decisions' (bullets, or 'None stated'), 'Action items' (bullets in the form '- [ ] task (owner if named, due date if named)', or 'None stated'), 'Open questions' (bullets, or 'None stated').",
   sop: "Write a step-by-step how-to / standard operating procedure in Markdown: a title, a one-sentence purpose, 'Before you start' (only if prerequisites are mentioned), then a numbered list of steps in the order shown, then 'Tips' only if the speaker gave any.",
   ticket: "Write an engineering/design ticket in Markdown: '# <short title>', 'Context', 'Problem or request', 'Acceptance criteria' (checkbox bullets), 'Notes'. Use only what the transcript supports; write 'Not stated' where details are missing.",
+  actions: "List every action item as Markdown checkbox bullets in the form '- [ ] task (owner if named, due date if named)'. Group under 'Decisions' (bullets) first only if decisions were stated. If there are no action items, say 'No action items were mentioned.' Do not invent owners or dates.",
   doc: "Write a clean written document in Markdown based on the recording: a title, a short intro, headed sections following the flow of the talk, and a closing 'Next steps' if any were mentioned.",
 };
 
@@ -100,6 +102,8 @@ function fallbackOutput(kind: Kind, title: string, transcript: string): string {
   const bullets = lines.slice(0, 12).map((l) => `- ${l.text}`).join("\n");
   const chap = chapters.map((c) => `- ${c.title}`).join("\n");
   switch (kind) {
+    case "actions":
+      return `# Action items: ${title}\n\n- [ ] ${lines.filter((l) => /\b(need to|should|will|let's|todo|please|must)\b/i.test(l.text)).slice(0, 8).map((l) => l.text).join("\n- [ ] ") || "None detected"}`;
     case "mom":
       return `# Minutes: ${title}\n\n## Summary\n${summary}\n\n## Discussion\n${chap || bullets}\n\n## Decisions\nNone detected. Add an Anthropic API key for fuller minutes.\n\n## Action items\nNone detected.`;
     case "sop":
@@ -149,7 +153,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { data: video } = await supabase
     .from("videos")
-    .select("id, owner_id, title, transcript, ai_outputs")
+    .select("id, owner_id, title, description, transcript, ai_outputs")
     .eq("id", id)
     .maybeSingle();
   if (!video || video.owner_id !== user.id) {
@@ -204,7 +208,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { error } = await supabase
     .from("videos")
-    .update({ summary: result.summary, chapters: result.chapters, ai_status: "done" })
+    .update({
+      summary: result.summary,
+      chapters: result.chapters,
+      ai_status: "done",
+      ...(result.title && /^Recording\b/.test(video.title) ? { title: result.title } : {}),
+      ...(!video.description && result.summary ? { description: result.summary.split(/(?<=[.!?])\s/)[0].slice(0, 200) } : {}),
+    })
     .eq("id", id);
   if (error) {
     await supabase.from("videos").update({ ai_status: "failed" }).eq("id", id);

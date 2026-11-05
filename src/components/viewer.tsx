@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Download, Eye, ExternalLink, Link2, Loader2, MessageSquare, Send, Sparkles, Trash2 } from "lucide-react";
 import AiDocs, { type AiOutputs } from "@/components/ai-docs";
 import InsightsPanel, { type ViewRow } from "@/components/insights-panel";
+import AskVideo from "@/components/ask-video";
 import SharePanel from "@/components/share-panel";
+import { track } from "@vercel/analytics";
 import { createClient } from "@/lib/supabase/client";
 import { formatTime, timeAgo } from "@/lib/format";
 
@@ -15,6 +17,7 @@ export interface Comment {
   body: string;
   timestamp_seconds: number;
   created_at: string;
+  parent_id: string | null;
 }
 export interface Reaction {
   id: string;
@@ -36,6 +39,9 @@ export interface ViewerVideo {
   cta_url: string | null;
   allow_download: boolean;
   ai_outputs: AiOutputs;
+  description: string | null;
+  expires_at: string | null;
+  require_signin: boolean;
   duration_seconds: number;
   view_count: number;
   created_at: string;
@@ -45,8 +51,9 @@ export interface ViewerVideo {
   ai_status: "none" | "processing" | "done" | "failed";
 }
 
+const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
 const EMOJIS = ["👍", "❤️", "😂", "🎉", "👀"];
-type Tab = "summary" | "chapters" | "transcript" | "docs" | "insights" | "share";
+type Tab = "summary" | "chapters" | "transcript" | "ask" | "docs" | "insights" | "share";
 
 function parseStamp(s: string): number {
   return s.split(":").reduce((acc, part) => acc * 60 + Number(part), 0);
@@ -62,6 +69,7 @@ export default function Viewer({
   unlockToken,
   hasPassword,
   views: viewRows,
+  shareEmails,
 }: {
   video: ViewerVideo;
   initialComments: Comment[];
@@ -72,6 +80,7 @@ export default function Viewer({
   unlockToken: string | null;
   hasPassword: boolean;
   views: ViewRow[];
+  shareEmails: string[];
 }) {
   const supabase = useMemo(() => createClient(unlockToken ?? undefined), [unlockToken]);
   const [ended, setEnded] = useState(false);
@@ -92,6 +101,10 @@ export default function Viewer({
   const [tab, setTab] = useState<Tab>("summary");
   const [views, setViews] = useState(initialVideo.view_count);
   const counted = useRef(false);
+  const [replyTo, setReplyTo] = useState<Comment | null>(null);
+  const [speed, setSpeed] = useState(1);
+  const [captions, setCaptions] = useState(false);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!userName) {
@@ -117,6 +130,49 @@ export default function Viewer({
     }, 4000);
     return () => clearInterval(t);
   }, [video.ai_status, video.id, supabase]);
+
+  // Pick up comments from other viewers without a reload.
+  useEffect(() => {
+    const t = setInterval(async () => {
+      if (document.hidden) return;
+      const { data } = await supabase
+        .from("comments")
+        .select("id, author_id, author_name, body, timestamp_seconds, created_at, parent_id")
+        .eq("video_id", initialVideo.id)
+        .order("timestamp_seconds", { ascending: true });
+      if (data) setComments(data as Comment[]);
+    }, 8000);
+    return () => clearInterval(t);
+  }, [supabase, initialVideo.id]);
+
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.playbackRate = speed;
+  }, [speed]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const el = videoRef.current;
+      const target = e.target as HTMLElement | null;
+      if (!el || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      const k = e.key.toLowerCase();
+      if (k === "k" || (k === " " && target?.tagName !== "BUTTON" && target?.tagName !== "VIDEO")) {
+        e.preventDefault();
+        if (el.paused) el.play().catch(() => {});
+        else el.pause();
+      } else if (k === "j") el.currentTime = Math.max(0, el.currentTime - 10);
+      else if (k === "l") el.currentTime = el.currentTime + 10;
+      else if (k === "m") el.muted = !el.muted;
+      else if (k === "c") setCaptions((c) => !c);
+      else if (k === "f") {
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+        else el.requestFullscreen?.().catch(() => {});
+      } else if (k === ">" || (k === "." && e.shiftKey)) setSpeed((s) => Math.min(2, SPEEDS[Math.min(SPEEDS.length - 1, SPEEDS.indexOf(s) + 1)] ?? s));
+      else if (k === "<" || (k === "," && e.shiftKey)) setSpeed((s) => SPEEDS[Math.max(0, SPEEDS.indexOf(s) - 1)] ?? s);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const sendProgress = useCallback(() => {
     if (isOwner) return;
@@ -154,6 +210,7 @@ export default function Viewer({
       if (sessionStorage.getItem(key)) return;
       sessionStorage.setItem(key, "1");
     } catch {}
+    track("video_played", { owner: isOwner });
     supabase.rpc("increment_view", { p_video_id: video.id }).then(({ error }) => {
       if (!error) setViews((v) => v + 1);
     });
@@ -176,9 +233,10 @@ export default function Viewer({
         author_id: userId,
         author_name: authorName,
         body: text,
-        timestamp_seconds: stamp ?? videoRef.current?.currentTime ?? 0,
+        timestamp_seconds: replyTo ? replyTo.timestamp_seconds : (stamp ?? videoRef.current?.currentTime ?? 0),
+        parent_id: replyTo?.id ?? null,
       })
-      .select("id, author_id, author_name, body, timestamp_seconds, created_at")
+      .select("id, author_id, author_name, body, timestamp_seconds, created_at, parent_id")
       .single();
     setPosting(false);
     if (error || !data) return;
@@ -190,6 +248,7 @@ export default function Viewer({
     setComments((c) => [...c, data as Comment].sort((a, b) => a.timestamp_seconds - b.timestamp_seconds));
     setBody("");
     setStamp(null);
+    setReplyTo(null);
   }
 
   async function deleteComment(id: string) {
@@ -235,6 +294,24 @@ export default function Viewer({
       .filter((l) => l.text.trim());
   }, [video.transcript]);
 
+  const captionLine = useMemo(() => {
+    let cur: { t: number | null; text: string } | null = null;
+    for (const l of transcriptLines) if (l.t !== null && l.t <= now) cur = l;
+    return cur && now - (cur.t ?? 0) < 8 ? cur.text : null;
+  }, [transcriptLines, now]);
+  const visibleTranscript = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? transcriptLines.filter((l) => l.text.toLowerCase().includes(q)) : transcriptLines;
+  }, [transcriptLines, search]);
+  const topLevel = useMemo(() => comments.filter((c) => !c.parent_id), [comments]);
+  const repliesOf = useMemo(() => {
+    const m = new Map<string, Comment[]>();
+    comments.forEach((c) => {
+      if (c.parent_id) m.set(c.parent_id, [...(m.get(c.parent_id) ?? []), c]);
+    });
+    return m;
+  }, [comments]);
+
   const safeDuration = duration > 0 ? duration : 1;
   const hasAi = !!video.summary || video.chapters.length > 0 || transcriptLines.length > 0;
 
@@ -266,6 +343,11 @@ export default function Viewer({
             }}
             className="aspect-video w-full"
           />
+          {captions && captionLine && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-14 flex justify-center px-4">
+              <p className="max-w-[90%] rounded bg-black/75 px-3 py-1.5 text-center text-sm text-white">{captionLine}</p>
+            </div>
+          )}
           {ended && video.cta_url && video.cta_label && (
             <div className="anim-fade absolute inset-x-0 top-0 grid place-items-center bg-black/60" style={{ bottom: "3.5rem" }}>
               <a href={video.cta_url} target="_blank" rel="noopener noreferrer" className="btn btn-lg btn-primary">
@@ -282,7 +364,7 @@ export default function Viewer({
             className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-brand"
             style={{ width: `${Math.min(100, (now / safeDuration) * 100)}%` }}
           />
-          {comments.map((c) => (
+          {topLevel.map((c) => (
             <button
               key={c.id}
               type="button"
@@ -298,6 +380,7 @@ export default function Viewer({
         <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <h1 className="text-2xl font-semibold tracking-tight sm:text-[1.75rem]">{video.title}</h1>
+            {video.description && <p className="mt-1 max-w-prose text-sm text-muted">{video.description}</p>}
             <div className="mt-1.5 flex items-center gap-3 text-sm text-muted">
               <span>{timeAgo(video.created_at)}</span>
               <span className="flex items-center gap-1.5">
@@ -323,7 +406,33 @@ export default function Viewer({
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2" role="group" aria-label="Reactions">
+        <div className="mt-4 flex flex-wrap items-center gap-2" role="group" aria-label="Playback">
+          <label className="flex items-center gap-2 text-sm text-muted">
+            Speed
+            <select
+              value={speed}
+              onChange={(e) => setSpeed(Number(e.target.value))}
+              className="h-8 rounded-lg border border-border-strong bg-surface px-2 text-sm text-foreground"
+            >
+              {SPEEDS.map((s) => (
+                <option key={s} value={s}>
+                  {s}x
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            aria-pressed={captions}
+            disabled={transcriptLines.length === 0}
+            onClick={() => setCaptions((c) => !c)}
+            className={`h-8 rounded-lg border px-3 text-sm disabled:opacity-50 ${captions ? "border-brand bg-brand-soft text-brand" : "border-border-strong bg-surface text-muted"}`}
+          >
+            Captions
+          </button>
+          <span className="hidden text-xs text-subtle md:inline">K play, J/L skip 10s, M mute, C captions, F fullscreen</span>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2" role="group" aria-label="Reactions">
           {EMOJIS.map((emoji) => (
             <button
               key={emoji}
@@ -347,7 +456,7 @@ export default function Viewer({
             <span className="mr-2 flex items-center gap-1.5 px-1 pb-2.5 text-sm font-semibold">
               <Sparkles className="h-4 w-4 text-brand" aria-hidden /> AI notes
             </span>
-            {((isOwner ? ["summary", "chapters", "transcript", "docs", "insights", "share"] : ["summary", "chapters", "transcript", "docs"]) as Tab[]).map((t) => (
+            {((isOwner ? ["summary", "chapters", "transcript", "ask", "docs", "insights", "share"] : ["summary", "chapters", "transcript", "ask", "docs"]) as Tab[]).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -360,12 +469,14 @@ export default function Viewer({
                     : "border-transparent text-muted hover:text-foreground"
                 }`}
               >
-                {t === "docs" ? "Documents" : t}
+                {t === "docs" ? "Documents" : t === "ask" ? "Ask" : t}
               </button>
             ))}
           </div>
           <div key={tab} className="anim-fade p-5 text-sm">
-            {tab === "docs" ? (
+            {tab === "ask" ? (
+              <AskVideo videoId={video.id} hasTranscript={!!video.transcript} signedIn={userId !== null} onSeek={seek} />
+            ) : tab === "docs" ? (
               <AiDocs
                 videoId={video.id}
                 title={video.title}
@@ -383,6 +494,10 @@ export default function Viewer({
                 allowDownload={video.allow_download}
                 ctaLabel={video.cta_label}
                 ctaUrl={video.cta_url}
+                expiresAt={video.expires_at}
+                requireSignin={video.require_signin}
+                emails={shareEmails}
+                description={video.description}
               />
             ) : video.ai_status === "processing" ? (
               <p className="flex items-center gap-2 text-muted">
@@ -419,8 +534,17 @@ export default function Viewer({
                 <p className="text-muted">No chapters yet.</p>
               )
             ) : transcriptLines.length > 0 ? (
+              <>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search the transcript"
+                aria-label="Search the transcript"
+                className="field mb-3 max-w-sm"
+              />
+              {visibleTranscript.length === 0 && <p className="text-muted">No matches.</p>}
               <ul className="-mx-2 max-h-72 space-y-0.5 overflow-y-auto">
-                {transcriptLines.map((l, i) => (
+                {visibleTranscript.map((l, i) => (
                   <li key={i}>
                     <button
                       type="button"
@@ -436,6 +560,7 @@ export default function Viewer({
                   </li>
                 ))}
               </ul>
+              </>
             ) : (
               <p className="text-muted">No transcript available.</p>
             )}
@@ -454,40 +579,62 @@ export default function Viewer({
           </div>
 
           <ul className="max-h-[26rem] divide-y divide-border overflow-y-auto">
-            {comments.length === 0 && (
+            {topLevel.length === 0 && (
               <li className="px-4 py-10 text-center text-sm leading-relaxed text-muted">
                 No comments yet. Pause the video and leave feedback at the exact moment.
               </li>
             )}
-            {comments.map((c, i) => {
-              const next = comments[i + 1]?.timestamp_seconds ?? Infinity;
+            {topLevel.map((c, i) => {
+              const next = topLevel[i + 1]?.timestamp_seconds ?? Infinity;
               const active = now >= c.timestamp_seconds && now < Math.min(next, c.timestamp_seconds + 8);
-              const canDelete = isOwner || (userId !== null && c.author_id === userId);
+              const replies = repliesOf.get(c.id) ?? [];
+              const row = (x: Comment, isReply: boolean) => {
+                const canDelete = isOwner || (userId !== null && x.author_id === userId);
+                return (
+                  <div className={isReply ? "ml-4 border-l-2 border-border pl-3" : ""}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="truncate text-sm font-medium">{x.author_name}</span>
+                        {!isReply && (
+                          <button
+                            type="button"
+                            onClick={() => seek(x.timestamp_seconds)}
+                            className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs tabular-nums text-brand hover:bg-brand hover:text-on-brand"
+                          >
+                            {formatTime(x.timestamp_seconds)}
+                          </button>
+                        )}
+                      </div>
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={() => deleteComment(x.id)}
+                          aria-label="Delete comment"
+                          className="rounded p-1 text-subtle hover:bg-record-soft hover:text-record"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <p className="mt-1 whitespace-pre-line break-words text-sm leading-relaxed">{x.body}</p>
+                  </div>
+                );
+              };
               return (
                 <li key={c.id} className={`anim-fade px-4 py-3 transition-colors ${active ? "bg-brand-soft" : ""}`}>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="truncate text-sm font-medium">{c.author_name}</span>
-                      <button
-                        type="button"
-                        onClick={() => seek(c.timestamp_seconds)}
-                        className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs tabular-nums text-brand hover:bg-brand hover:text-on-brand"
-                      >
-                        {formatTime(c.timestamp_seconds)}
-                      </button>
+                  {row(c, false)}
+                  {replies.map((r) => (
+                    <div key={r.id} className="mt-2">
+                      {row(r, true)}
                     </div>
-                    {canDelete && (
-                      <button
-                        type="button"
-                        onClick={() => deleteComment(c.id)}
-                        aria-label="Delete comment"
-                        className="rounded p-1 text-subtle hover:bg-record-soft hover:text-record"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                  <p className="mt-1 whitespace-pre-line break-words text-sm leading-relaxed">{c.body}</p>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setReplyTo(c)}
+                    className="mt-1.5 text-xs text-muted hover:text-foreground"
+                  >
+                    Reply
+                  </button>
                 </li>
               );
             })}
@@ -509,6 +656,14 @@ export default function Viewer({
                 />
               </>
             )}
+            {replyTo && (
+              <p className="flex items-center justify-between rounded-lg bg-surface px-3 py-1.5 text-xs text-muted">
+                Replying to {replyTo.author_name}
+                <button type="button" onClick={() => setReplyTo(null)} className="text-foreground underline">
+                  Cancel
+                </button>
+              </p>
+            )}
             <label htmlFor="c-body" className="sr-only">
               Comment
             </label>
@@ -519,7 +674,7 @@ export default function Viewer({
               onFocus={captureStamp}
               maxLength={2000}
               rows={3}
-              placeholder="Comment at this moment"
+              placeholder={replyTo ? "Write a reply" : "Comment at this moment"}
               className="field resize-none"
             />
             <div className="flex items-center justify-between">

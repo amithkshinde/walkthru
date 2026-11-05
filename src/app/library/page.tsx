@@ -4,12 +4,14 @@ import { Eye, MessageSquare, Video } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppNav from "@/components/app-nav";
 import VideoCardActions from "@/components/video-card-actions";
+import FolderBar from "@/components/folder-bar";
 import { formatTime, timeAgo } from "@/lib/format";
 
 export const instant = false;
 export const metadata = { title: "Library | Walkthru" };
 
-export default async function LibraryPage() {
+export default async function LibraryPage({ searchParams }: { searchParams: Promise<{ folder?: string; q?: string }> }) {
+  const { folder, q } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -18,17 +20,25 @@ export default async function LibraryPage() {
 
   const { data: videos } = await supabase
     .from("videos")
-    .select("id, title, storage_path, duration_seconds, status, view_count, created_at, comments(count)")
+    .select("id, title, storage_path, thumbnail_path, folder_id, duration_seconds, status, view_count, created_at, comments(count)")
     .eq("owner_id", user.id)
     .order("created_at", { ascending: false });
 
-  const paths = (videos ?? []).map((v) => v.storage_path).filter((x): x is string => !!x);
+  const { data: folders } = await supabase.from("folders").select("id, name").order("name");
+  const term = (q ?? "").trim().toLowerCase();
+  const shown = (videos ?? []).filter(
+    (v) =>
+      (!folder || (folder === "none" ? !v.folder_id : v.folder_id === folder)) &&
+      (!term || v.title.toLowerCase().includes(term)),
+  );
+  const paths = shown.flatMap((v) => (v.thumbnail_path ? [v.thumbnail_path] : v.storage_path ? [v.storage_path] : []));
   const signed = paths.length ? await supabase.storage.from("recordings").createSignedUrls(paths, 60 * 60) : { data: [] };
   const urlByPath = new Map((signed.data ?? []).map((r) => [r.path, r.signedUrl]));
 
-  const items = (videos ?? []).map((v) => ({
+  const items = shown.map((v) => ({
     ...v,
-    url: (v.storage_path && urlByPath.get(v.storage_path)) || null,
+    url: urlByPath.get(v.thumbnail_path ?? v.storage_path ?? "") || null,
+    isImage: !!v.thumbnail_path,
     commentCount: (v.comments as unknown as { count: number }[] | null)?.[0]?.count ?? 0,
   }));
 
@@ -47,7 +57,11 @@ export default async function LibraryPage() {
           </div>
         </div>
 
-        {items.length === 0 ? (
+        <FolderBar folders={folders ?? []} active={folder ?? null} q={q ?? ""} />
+
+        {items.length === 0 && (videos ?? []).length > 0 ? (
+          <p className="py-16 text-center text-sm text-muted">No recordings match.</p>
+        ) : items.length === 0 ? (
           <div className="panel flex flex-col items-center px-6 py-20 text-center">
             <div className="grid h-12 w-12 place-items-center rounded-full bg-brand-soft">
               <Video className="h-5 w-5 text-brand" aria-hidden />
@@ -72,7 +86,10 @@ export default async function LibraryPage() {
                   href={`/v/${v.id}`}
                   className="group relative block aspect-video overflow-hidden rounded-card border border-border bg-[#14161c]"
                 >
-                  {v.url && v.status === "ready" ? (
+                  {v.url && v.status === "ready" && v.isImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={v.url} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]" />
+                  ) : v.url && v.status === "ready" ? (
                     <video
                       src={`${v.url}#t=0.5`}
                       preload="metadata"
@@ -109,7 +126,7 @@ export default async function LibraryPage() {
                       </span>
                     </div>
                   </div>
-                  <VideoCardActions id={v.id} storagePath={v.storage_path} />
+                  <VideoCardActions id={v.id} storagePath={v.storage_path} thumbnailPath={v.thumbnail_path} folderId={v.folder_id} folders={folders ?? []} />
                 </div>
               </li>
             ))}

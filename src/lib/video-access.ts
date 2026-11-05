@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 
-export type Access = "missing" | "private" | "locked" | "open";
+export type Access = "missing" | "private" | "locked" | "open" | "expired" | "signin" | "restricted";
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const unlockCookie = (id: string) => `wt_unlock_${id}`;

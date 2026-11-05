@@ -9,12 +9,13 @@ export interface AiOutput {
   generated_at: string;
   used_claude: boolean;
 }
-export type AiOutputs = Partial<Record<"notes" | "mom" | "sop" | "ticket" | "doc", AiOutput>>;
+export type AiOutputs = Partial<Record<"notes" | "mom" | "sop" | "ticket" | "doc" | "actions", AiOutput>>;
 
 const KINDS = [
   { id: "notes", label: "Notes" },
   { id: "mom", label: "Minutes of meeting" },
   { id: "sop", label: "Step-by-step guide" },
+  { id: "actions", label: "Action items" },
   { id: "ticket", label: "Ticket" },
   { id: "doc", label: "Document" },
 ] as const;

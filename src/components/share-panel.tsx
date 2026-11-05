@@ -11,6 +11,10 @@ interface Props {
   allowDownload: boolean;
   ctaLabel: string | null;
   ctaUrl: string | null;
+  expiresAt: string | null;
+  requireSignin: boolean;
+  emails: string[];
+  description: string | null;
 }
 
 export default function SharePanel(p: Props) {
@@ -24,6 +28,11 @@ export default function SharePanel(p: Props) {
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [expires, setExpires] = useState(p.expiresAt ? p.expiresAt.slice(0, 10) : "");
+  const [signin, setSignin] = useState(p.requireSignin);
+  const [emails, setEmails] = useState<string[]>(p.emails);
+  const [newEmail, setNewEmail] = useState("");
+  const [desc, setDesc] = useState(p.description ?? "");
 
   const embed = `<iframe src="${typeof window === "undefined" ? "" : window.location.origin}/embed/${p.videoId}" width="640" height="360" style="border:0" allow="fullscreen" allowfullscreen></iframe>`;
 
@@ -62,6 +71,32 @@ export default function SharePanel(p: Props) {
     say("ok", clear ? "Password removed" : "Password set");
   }
 
+  async function saveExpiry(value: string) {
+    setExpires(value);
+    await update({ expires_at: value ? new Date(`${value}T23:59:59`).toISOString() : null }, "exp");
+  }
+  async function toggleSignin(v: boolean) {
+    if (await update({ require_signin: v }, "si")) setSignin(v);
+  }
+  async function addEmail(e: React.FormEvent) {
+    e.preventDefault();
+    const em = newEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) return say("err", "Enter a valid email address.");
+    if (emails.includes(em)) return setNewEmail("");
+    const { error } = await supabase.from("video_shares").insert({ video_id: p.videoId, email: em });
+    if (error) return say("err", "Could not add that email.");
+    setEmails((l) => [...l, em]);
+    setNewEmail("");
+    say("ok", "Saved");
+  }
+  async function removeEmail(em: string) {
+    const { error } = await supabase.from("video_shares").delete().eq("video_id", p.videoId).eq("email", em);
+    if (!error) setEmails((l) => l.filter((x) => x !== em));
+  }
+  async function saveDesc() {
+    await update({ description: desc.trim() || null }, "desc");
+  }
+
   async function saveCta(e: React.FormEvent) {
     e.preventDefault();
     const l = label.trim();
@@ -96,6 +131,59 @@ export default function SharePanel(p: Props) {
           ))}
         </div>
       </fieldset>
+
+      <div>
+        <label htmlFor="sp-desc" className="font-medium">
+          Description
+        </label>
+        <textarea id="sp-desc" value={desc} onChange={(e) => setDesc(e.target.value)} onBlur={saveDesc} maxLength={600} rows={2} placeholder="Shown under the title" className="field mt-2 resize-none" />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label htmlFor="sp-exp" className="font-medium">
+            Link expires
+          </label>
+          <div className="mt-2 flex gap-2">
+            <input id="sp-exp" type="date" value={expires} min={new Date().toISOString().slice(0, 10)} onChange={(e) => saveExpiry(e.target.value)} className="field" />
+            {expires && (
+              <button type="button" className="btn btn-ghost" onClick={() => saveExpiry("")}>
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+        <label className="flex items-center gap-2.5 self-end pb-2">
+          <input type="checkbox" checked={signin} onChange={(e) => toggleSignin(e.target.checked)} className="h-4 w-4 accent-[var(--brand)]" />
+          Viewers must sign in
+        </label>
+      </div>
+
+      <form onSubmit={addEmail}>
+        <label htmlFor="sp-email" className="font-medium">
+          Share with specific people
+        </label>
+        <div className="mt-2 flex gap-2">
+          <input id="sp-email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="name@company.com" className="field max-w-xs" />
+          <button type="submit" className="btn btn-secondary">
+            Add
+          </button>
+        </div>
+        {emails.length > 0 ? (
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {emails.map((em) => (
+              <li key={em} className="flex items-center gap-1.5 rounded-full bg-surface-muted py-1 pl-3 pr-1.5 text-xs">
+                {em}
+                <button type="button" aria-label={`Remove ${em}`} onClick={() => removeEmail(em)} className="grid h-5 w-5 place-items-center rounded-full hover:bg-border">
+                  x
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-1 text-xs text-muted">With no emails added, anyone with the link can watch. Once you add one, only those people can, after signing in.</p>
+        )}
+      </form>
 
       <div>
         <label htmlFor="sp-pw" className="font-medium">

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { track } from "@vercel/analytics";
 import fixWebmDuration from "fix-webm-duration";
 import {
   Camera,
@@ -60,6 +61,36 @@ function pickMime(): string {
   return MIME_CANDIDATES.find((m) => MediaRecorder.isTypeSupported(m)) ?? "";
 }
 
+async function makeThumbnail(blob: Blob): Promise<Blob | null> {
+  const url = URL.createObjectURL(blob);
+  try {
+    const v = document.createElement("video");
+    v.muted = true;
+    v.playsInline = true;
+    v.src = url;
+    await new Promise<void>((res, rej) => {
+      v.onloadeddata = () => res();
+      v.onerror = () => rej(new Error("thumb"));
+    });
+    const target = Number.isFinite(v.duration) && v.duration > 2 ? Math.min(1.5, v.duration / 4) : 0;
+    v.currentTime = target;
+    await new Promise<void>((res) => {
+      v.onseeked = () => res();
+      setTimeout(res, 1500);
+    });
+    if (!v.videoWidth) return null;
+    const w = 640;
+    const h = Math.round((w * v.videoHeight) / v.videoWidth);
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    c.getContext("2d")!.drawImage(v, 0, 0, w, h);
+    return await new Promise<Blob | null>((res) => c.toBlob((b) => res(b), "image/jpeg", 0.8));
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export default function Recorder() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("screen-cam");
@@ -84,6 +115,8 @@ export default function Recorder() {
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const accumulatedRef = useRef(0);
   const segmentStartRef = useRef(0);
+  const bubbleRef = useRef<{ corner: "bl" | "br" | "tl" | "tr"; size: number }>({ corner: "bl", size: 0.13 });
+  const [bubble, setBubble] = useState<{ corner: "bl" | "br" | "tl" | "tr"; size: number }>({ corner: "bl", size: 0.13 });
   const previewRef = useRef<HTMLVideoElement | null>(null);
   const originalRef = useRef<{ blob: Blob; durationMs: number; mime: string; segments: { t: number; text: string }[] } | null>(null);
   const [trimOpen, setTrimOpen] = useState(false);
@@ -256,10 +289,11 @@ export default function Recorder() {
         const draw = () => {
           ctx2d.drawImage(screenVideo, 0, 0, W, H);
           if (camVideo.videoWidth) {
-            const r = Math.round(H * 0.13);
+            const { corner, size } = bubbleRef.current;
+            const r = Math.round(H * size);
             const pad = Math.round(H * 0.035);
-            const cx = r + pad;
-            const cy = H - r - pad;
+            const cx = corner.endsWith("l") ? r + pad : W - r - pad;
+            const cy = corner.startsWith("t") ? r + pad : H - r - pad;
             ctx2d.save();
             ctx2d.beginPath();
             ctx2d.arc(cx, cy, r, 0, Math.PI * 2);
@@ -527,17 +561,33 @@ export default function Recorder() {
       });
       if (insertError) throw insertError;
 
-      const { error: uploadError } = await supabase.storage
-        .from("recordings")
-        .upload(path, result.blob, { contentType: result.mime.split(";")[0], upsert: false });
+      let uploadError: { message: string } | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await supabase.storage
+          .from("recordings")
+          .upload(path, result.blob, { contentType: result.mime.split(";")[0], upsert: true });
+        uploadError = res.error;
+        if (!uploadError) break;
+        await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+      }
       if (uploadError) {
         await supabase.from("videos").update({ status: "failed" }).eq("id", id);
         throw uploadError;
       }
 
+      let thumbnailPath: string | null = null;
+      try {
+        const thumb = await makeThumbnail(result.blob);
+        if (thumb) {
+          const tPath = `${user.id}/${id}.jpg`;
+          const { error: tErr } = await supabase.storage.from("recordings").upload(tPath, thumb, { contentType: "image/jpeg", upsert: true });
+          if (!tErr) thumbnailPath = tPath;
+        }
+      } catch {}
+
       const { error: readyError } = await supabase
         .from("videos")
-        .update({ status: "ready" })
+        .update({ status: "ready", thumbnail_path: thumbnailPath })
         .eq("id", id);
       if (readyError) throw readyError;
 
@@ -553,6 +603,7 @@ export default function Recorder() {
         }).catch(() => {});
       }
 
+      track("recording_saved", { trimmed });
       router.push(`/v/${id}`);
     } catch (err) {
       setPhaseBoth("review");
@@ -671,6 +722,43 @@ export default function Recorder() {
               <button type="button" onClick={resume} className="btn btn-secondary">
                 <Play className="h-4 w-4" /> Resume
               </button>
+            )}
+            {mode === "screen-cam" && (
+              <div className="flex w-full items-center justify-center gap-3 text-xs text-muted" role="group" aria-label="Camera bubble">
+                <span>Camera</span>
+                {([["tl", "Top left"], ["tr", "Top right"], ["bl", "Bottom left"], ["br", "Bottom right"]] as const).map(([c, label]) => (
+                  <button
+                    key={c}
+                    type="button"
+                    aria-label={label}
+                    aria-pressed={bubble.corner === c}
+                    onClick={() => {
+                      const next = { ...bubbleRef.current, corner: c };
+                      bubbleRef.current = next;
+                      setBubble(next);
+                    }}
+                    className={`h-6 rounded border px-2 ${bubble.corner === c ? "border-brand bg-brand-soft text-brand" : "border-border-strong"}`}
+                  >
+                    {c.toUpperCase()}
+                  </button>
+                ))}
+                {([["S", 0.09], ["M", 0.13], ["L", 0.18]] as const).map(([l, sz]) => (
+                  <button
+                    key={l}
+                    type="button"
+                    aria-label={`Size ${l}`}
+                    aria-pressed={bubble.size === sz}
+                    onClick={() => {
+                      const next = { ...bubbleRef.current, size: sz };
+                      bubbleRef.current = next;
+                      setBubble(next);
+                    }}
+                    className={`h-6 w-6 rounded border ${bubble.size === sz ? "border-brand bg-brand-soft text-brand" : "border-border-strong"}`}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
             )}
             <button type="button" onClick={stop} className="btn btn-record">
               <Square className="h-3.5 w-3.5 fill-white" /> Stop and review

@@ -47,6 +47,27 @@ export default async function VideoPage({ params }: Params) {
 
   if (access === "missing") notFound();
 
+  if (access === "expired" || access === "signin" || access === "restricted") {
+    const copy = {
+      expired: ["This link has expired", "The owner set this video to stop being available. Ask them for a new link."],
+      signin: ["Sign in to watch", "The owner only shares this video with signed-in viewers."],
+      restricted: ["You don't have access", `This video is shared with specific people${user?.email ? `, and ${user.email} isn't one of them` : ""}.`],
+    }[access];
+    return (
+      <Shell signedIn={signedIn}>
+        <div className="mx-auto mt-20 w-full max-w-sm px-4 text-center">
+          <h1 className="text-xl font-semibold tracking-tight">{copy[0]}</h1>
+          <p className="mt-1.5 text-sm text-muted">{copy[1]}</p>
+          {access === "signin" && (
+            <Link href={`/login?next=/v/${id}`} className="btn btn-primary mt-5">
+              Sign in
+            </Link>
+          )}
+        </div>
+      </Shell>
+    );
+  }
+
   if (access === "private") {
     return (
       <Shell signedIn={signedIn}>
@@ -81,7 +102,7 @@ export default async function VideoPage({ params }: Params) {
   const { data: video } = await supabase
     .from("videos")
     .select(
-      "id, owner_id, title, storage_path, duration_seconds, view_count, created_at, summary, transcript, chapters, ai_status, visibility, cta_label, cta_url, allow_download, ai_outputs",
+      "id, owner_id, title, storage_path, duration_seconds, view_count, created_at, summary, transcript, chapters, ai_status, visibility, cta_label, cta_url, allow_download, ai_outputs, description, expires_at, require_signin, folder_id",
     )
     .eq("id", id)
     .maybeSingle();
@@ -97,7 +118,7 @@ export default async function VideoPage({ params }: Params) {
       : Promise.resolve({ data: null }),
     supabase
       .from("comments")
-      .select("id, author_id, author_name, body, timestamp_seconds, created_at")
+      .select("id, author_id, author_name, body, timestamp_seconds, created_at, parent_id")
       .eq("video_id", id)
       .order("timestamp_seconds", { ascending: true }),
     supabase.from("reactions").select("id, emoji, timestamp_seconds").eq("video_id", id),
@@ -116,8 +137,9 @@ export default async function VideoPage({ params }: Params) {
 
   let views: ViewRow[] = [];
   let hasPassword = false;
+  let shareEmails: string[] = [];
   if (isOwner) {
-    const [{ data: viewRows }, { data: pw }] = await Promise.all([
+    const [{ data: viewRows }, { data: pw }, { data: shares }] = await Promise.all([
       supabase
         .from("video_views")
         .select("id, viewer_name, watched_seconds, created_at, updated_at")
@@ -125,7 +147,9 @@ export default async function VideoPage({ params }: Params) {
         .order("updated_at", { ascending: false })
         .limit(200),
       supabase.rpc("video_has_password", { vid: id }),
+      supabase.from("video_shares").select("email").eq("video_id", id),
     ]);
+    shareEmails = (shares ?? []).map((r) => r.email as string);
     views = (viewRows as ViewRow[] | null) ?? [];
     hasPassword = !!pw;
   }
@@ -152,7 +176,11 @@ export default async function VideoPage({ params }: Params) {
           cta_url: video.cta_url,
           allow_download: video.allow_download,
           ai_outputs: (video.ai_outputs as AiOutputs | null) ?? {},
+          description: video.description,
+          expires_at: video.expires_at,
+          require_signin: video.require_signin,
         }}
+        shareEmails={shareEmails}
         initialComments={(comments as Comment[] | null) ?? []}
         initialReactions={(reactions as Reaction[] | null) ?? []}
         userId={user?.id ?? null}
