@@ -38,7 +38,8 @@ interface SpeechRecognitionLike {
   lang: string;
   onresult: ((e: SpeechEventLike) => void) | null;
   onend: (() => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((e: { error?: string }) => void) | null;
+  onstart: (() => void) | null;
   start: () => void;
   stop: () => void;
 }
@@ -122,6 +123,7 @@ export default function Recorder() {
   const segmentStartRef = useRef(0);
   const bubbleRef = useRef<{ corner: "bl" | "br" | "tl" | "tr"; size: number }>({ corner: "bl", size: 0.13 });
   const [bubble, setBubble] = useState<{ corner: "bl" | "br" | "tl" | "tr"; size: number }>({ corner: "bl", size: 0.13 });
+  const [speech, setSpeech] = useState<"off" | "listening" | string>("off");
   const bytesRef = useRef(0);
   const [sizeBytes, setSizeBytes] = useState(0);
   const [limitHit, setLimitHit] = useState(false);
@@ -184,7 +186,10 @@ export default function Recorder() {
       webkitSpeechRecognition?: new () => SpeechRecognitionLike;
     };
     const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition;
-    if (!SR) return;
+    if (!SR) {
+      setSpeech("unsupported");
+      return;
+    }
     const rec = new SR();
     rec.continuous = true;
     rec.interimResults = false;
@@ -198,15 +203,25 @@ export default function Recorder() {
         }
       }
     };
+    let fatal = false;
+    rec.onstart = () => setSpeech("listening");
     rec.onend = () => {
       // Chrome stops recognition after silence; keep it going while recording.
-      if (recognitionRef.current === rec && phaseRef.current === "recording") {
-        try {
-          rec.start();
-        } catch {}
+      if (!fatal && recognitionRef.current === rec && (phaseRef.current === "recording" || phaseRef.current === "paused")) {
+        setTimeout(() => {
+          if (recognitionRef.current !== rec || phaseRef.current !== "recording") return;
+          try {
+            rec.start();
+          } catch {}
+        }, 300);
       }
     };
-    rec.onerror = () => {};
+    rec.onerror = (e) => {
+      const code = e.error ?? "error";
+      if (code === "no-speech" || code === "aborted") return;
+      if (code === "not-allowed" || code === "service-not-allowed") fatal = true;
+      setSpeech(code);
+    };
     recognitionRef.current = rec;
     try {
       rec.start();
@@ -218,6 +233,7 @@ export default function Recorder() {
     setPhaseBoth("starting");
     chunksRef.current = [];
     segmentsRef.current = [];
+    setSpeech("off");
     accumulatedRef.current = 0;
     setElapsed(0);
 
@@ -706,6 +722,11 @@ export default function Recorder() {
             </span>
           </button>
 
+          {micOn && segmentsRef.current.length === 0 && (
+            <p role="status" className="mt-4 rounded-lg bg-surface-muted px-3 py-2 text-sm text-muted">
+              No live transcript was captured. After saving you can transcribe it from the video page.
+            </p>
+          )}
           {limitHit && (
             <p role="status" className="mt-4 rounded-lg bg-surface-muted px-3 py-2 text-sm text-muted">
               Recording stopped at the {Math.round(MAX_BYTES / 1e6)} MB limit, about {Math.max(1, Math.round(elapsed / 60000))} minutes. Save it, then record the next part.
@@ -767,6 +788,19 @@ export default function Recorder() {
               <button type="button" onClick={resume} className="btn btn-secondary">
                 <Play className="h-4 w-4" /> Resume
               </button>
+            )}
+            {micOn && (
+              <p className={`w-full text-center text-xs ${speech === "listening" ? "text-muted" : speech === "off" ? "text-muted" : "text-record"}`} role="status">
+                {speech === "listening"
+                  ? "Live transcript on"
+                  : speech === "off"
+                    ? "Starting live transcript"
+                    : speech === "unsupported"
+                      ? "Live transcript needs Chrome or Edge. You can transcribe after saving."
+                      : speech === "not-allowed" || speech === "service-not-allowed"
+                        ? "Live transcript blocked. Allow microphone access for this site."
+                        : `Live transcript paused (${speech}). You can transcribe after saving.`}
+              </p>
             )}
             <div className="w-full" aria-live="polite">
               <div className="h-1 overflow-hidden rounded-full bg-surface-muted" role="progressbar" aria-label="Recording size" aria-valuemin={0} aria-valuemax={MAX_BYTES} aria-valuenow={sizeBytes}>
