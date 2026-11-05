@@ -44,7 +44,7 @@ function ProductPreview() {
           <div className="relative aspect-video overflow-hidden rounded-lg bg-[#14161c]">
             <div className="absolute inset-0 bg-[radial-gradient(120%_90%_at_20%_0%,#2a3350_0%,#14161c_60%)]" />
             <div className="absolute left-4 top-4 flex items-center gap-1.5 rounded-full bg-black/45 px-2.5 py-1 text-[11px] font-medium text-white">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#ff6b7d]" /> Onboarding review
+              <span className="rec-dot h-1.5 w-1.5 rounded-full bg-[#ff6b7d]" style={{ "--ring-c": "rgb(255 107 125 / 0.6)" } as React.CSSProperties} /> Onboarding review
             </div>
             <div className="absolute inset-x-6 top-1/2 grid -translate-y-1/2 gap-2">
               <div className="h-3 w-2/5 rounded bg-white/15" />
@@ -57,12 +57,12 @@ function ProductPreview() {
           </div>
           <div className="relative mt-3 h-4">
             <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-surface-muted" />
-            <div className="anim-grow-x absolute left-0 top-1/2 h-1 w-[22%] -translate-y-1/2 rounded-full bg-brand" style={{ "--d": "700ms" } as React.CSSProperties} />
+            <div className="loop-playhead absolute left-0 top-1/2 h-1 w-full -translate-y-1/2 rounded-full bg-brand" style={{ "--d": "900ms" } as React.CSSProperties} />
             {MARKERS.map((m, i) => (
               <span
                 key={m}
-                style={{ left: `${m}%`, "--d": `${1000 + i * 140}ms` } as React.CSSProperties}
-                className="anim-pop absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface bg-record"
+                style={{ left: `${m}%`, "--d": `${900 + Math.round((m / 100) * 12000) - 360}ms` } as React.CSSProperties}
+                className="loop-marker absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface bg-record"
               />
             ))}
           </div>
@@ -78,8 +78,8 @@ function ProductPreview() {
           {PREVIEW_COMMENTS.map((c, i) => (
             <li
               key={c.time}
-              style={{ "--d": `${900 + i * 160}ms` } as React.CSSProperties}
-              className={`anim-fade px-3.5 py-3 ${c.active ? "bg-brand-soft" : ""}`}
+              style={{ "--d": "900ms" } as React.CSSProperties}
+              className={`${["loop-row-a", "loop-row-b", "loop-row-c"][i]} px-3.5 py-3`}
             >
               <div className="flex items-center gap-2">
                 <span className="text-[13px] font-medium">{c.name}</span>
@@ -139,7 +139,7 @@ export default async function Home() {
             </p>
             <div className="anim-rise mt-8 flex flex-wrap items-center gap-3" style={{ "--d": "160ms" } as React.CSSProperties}>
               <Link href={recordHref} className="btn btn-lg btn-primary">
-                <span className="h-2 w-2 rounded-full bg-record ring-2 ring-white/40" />
+                <span className="rec-dot h-2 w-2 rounded-full bg-record ring-2 ring-white/40" style={{ "--ring-c": "rgb(255 255 255 / 0.5)" } as React.CSSProperties} />
                 Start recording
               </Link>
               {!user && (

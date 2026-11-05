@@ -242,8 +242,124 @@ p {
   animation-delay: var(--d, 0ms);
 }
 
+/* Recording dot: a soft ring that expands and fades. Used wherever red means "live". */
+@keyframes rec-ring {
+  0% {
+    box-shadow: 0 0 0 0 var(--ring-c, rgb(217 45 67 / 0.55));
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+.rec-dot {
+  animation: rec-ring 1.8s ease-out infinite;
+}
+
+/*
+  Landing preview loop (12s): the playhead sweeps once, each marker pings as it is
+  reached, and the matching comment row highlights until the next one.
+*/
+@keyframes playhead {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes marker-hit {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    scale: 1;
+  }
+  3% {
+    scale: 1.45;
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--record) 25%, transparent);
+  }
+  8% {
+    scale: 1;
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+@keyframes row-a {
+  0%,
+  10% {
+    background-color: transparent;
+  }
+  12%,
+  34% {
+    background-color: var(--brand-soft);
+  }
+  36%,
+  100% {
+    background-color: transparent;
+  }
+}
+@keyframes row-b {
+  0%,
+  34% {
+    background-color: transparent;
+  }
+  36%,
+  56% {
+    background-color: var(--brand-soft);
+  }
+  58%,
+  100% {
+    background-color: transparent;
+  }
+}
+@keyframes row-c {
+  0%,
+  56% {
+    background-color: transparent;
+  }
+  58%,
+  96% {
+    background-color: var(--brand-soft);
+  }
+  98%,
+  100% {
+    background-color: transparent;
+  }
+}
+.loop-playhead {
+  transform-origin: left center;
+  animation: playhead 12s linear infinite;
+  animation-delay: var(--d, 0ms);
+}
+.loop-marker {
+  animation: marker-hit 12s ease-out infinite;
+  animation-delay: var(--d, 0ms);
+}
+.loop-row-a,
+.loop-row-b,
+.loop-row-c {
+  animation-duration: 12s;
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+  animation-delay: var(--d, 0ms);
+}
+.loop-row-a {
+  animation-name: row-a;
+}
+.loop-row-b {
+  animation-name: row-b;
+}
+.loop-row-c {
+  animation-name: row-c;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse-record,
+  .rec-dot,
+  .loop-playhead,
+  .loop-marker,
+  .loop-row-a,
+  .loop-row-b,
+  .loop-row-c,
   .anim-rise,
   .anim-fade,
   .anim-pop,
