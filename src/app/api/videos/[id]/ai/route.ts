@@ -153,7 +153,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { data: video } = await supabase
     .from("videos")
-    .select("id, owner_id, title, description, transcript, ai_outputs")
+    .select("id, owner_id, title, transcript, ai_outputs")
     .eq("id", id)
     .maybeSingle();
   if (!video || video.owner_id !== user.id) {
@@ -213,7 +213,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       chapters: result.chapters,
       ai_status: "done",
       ...(result.title && /^Recording\b/.test(video.title) ? { title: result.title } : {}),
-      ...(!video.description && result.summary ? { description: result.summary.split(/(?<=[.!?])\s/)[0].slice(0, 200) } : {}),
     })
     .eq("id", id);
   if (error) {

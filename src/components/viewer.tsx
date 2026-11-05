@@ -40,7 +40,6 @@ export interface ViewerVideo {
   cta_url: string | null;
   allow_download: boolean;
   ai_outputs: AiOutputs;
-  description: string | null;
   expires_at: string | null;
   require_signin: boolean;
   link_restricted: boolean;
@@ -411,7 +410,6 @@ export default function Viewer({
         <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <h1 className="text-2xl font-semibold tracking-tight sm:text-[1.75rem]">{video.title}</h1>
-            {video.description && <p className="mt-1 max-w-prose text-sm text-muted">{video.description}</p>}
             <div className="mt-1.5 flex items-center gap-3 text-sm text-muted">
               <span>{timeAgo(video.created_at)}</span>
               <span className="flex items-center gap-1.5">
@@ -433,7 +431,6 @@ export default function Viewer({
                 requireSignin={video.require_signin}
                 emails={shareEmails}
                 requests={requests}
-                description={video.description}
               />
             )}
             {video.downloadUrl && (

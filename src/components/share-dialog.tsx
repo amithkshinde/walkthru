@@ -25,7 +25,6 @@ interface Props {
   requireSignin: boolean;
   emails: string[];
   requests: AccessRequest[];
-  description: string | null;
 }
 
 export default function ShareDialog(p: Props) {
@@ -40,7 +39,6 @@ export default function ShareDialog(p: Props) {
   const [allowDownload, setAllowDownload] = useState(p.allowDownload);
   const [expires, setExpires] = useState(p.expiresAt ? p.expiresAt.slice(0, 10) : "");
   const [signin, setSignin] = useState(p.requireSignin);
-  const [desc, setDesc] = useState(p.description ?? "");
   const [moreOpen, setMoreOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
@@ -259,74 +257,77 @@ export default function ShareDialog(p: Props) {
             </div>
           </div>
 
+          <div className="mt-6 grid gap-5 border-t border-border pt-6 text-sm sm:grid-cols-2">
+          <div>
+            <label htmlFor="sd-pw" className="font-medium">
+              Password {hasPassword && <span className="ml-1 text-xs font-normal text-success">on</span>}
+            </label>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <input
+                id="sd-pw"
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                maxLength={100}
+                placeholder={hasPassword ? "Set a new password" : "Add a password"}
+                className="field max-w-xs"
+              />
+              <button type="button" onClick={() => savePassword(false)} disabled={busy === "pw" || !password} className="btn btn-secondary">
+                {busy === "pw" && <Loader2 className="h-4 w-4 animate-spin" />} {hasPassword ? "Change" : "Set"}
+              </button>
+              {hasPassword && (
+                <button type="button" onClick={() => savePassword(true)} disabled={busy === "pw"} className="btn btn-ghost">
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label htmlFor="sd-exp" className="font-medium">
+                Link expires
+              </label>
+              <input
+                id="sd-exp"
+                type="date"
+                value={expires}
+                min={new Date().toISOString().slice(0, 10)}
+                onChange={async (e) => {
+                  setExpires(e.target.value);
+                  await update({ expires_at: e.target.value ? new Date(`${e.target.value}T23:59:59`).toISOString() : null }, "exp");
+                }}
+                className="field mt-2"
+              />
+            </div>
+            {expires && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={async () => {
+                  setExpires("");
+                  await update({ expires_at: null }, "exp");
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          </div>
+
           <button
             type="button"
             onClick={() => setMoreOpen((o) => !o)}
             aria-expanded={moreOpen}
-            className="mt-6 flex items-center gap-2 text-sm font-medium text-muted hover:text-foreground"
+            className="mt-5 flex items-center gap-2 text-sm font-medium text-muted hover:text-foreground"
           >
             <Settings2 className="h-4 w-4" aria-hidden /> Link settings
           </button>
 
           {moreOpen && (
             <div className="anim-fade mt-4 space-y-5 rounded-lg border border-border bg-background p-4 text-sm">
-              <div>
-                <label htmlFor="sd-pw" className="font-medium">
-                  Password {hasPassword && <span className="ml-1 text-xs font-normal text-success">on</span>}
-                </label>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <input
-                    id="sd-pw"
-                    type="password"
-                    autoComplete="new-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    maxLength={100}
-                    placeholder={hasPassword ? "Set a new password" : "Add a password"}
-                    className="field max-w-xs"
-                  />
-                  <button type="button" onClick={() => savePassword(false)} disabled={busy === "pw" || !password} className="btn btn-secondary">
-                    {busy === "pw" && <Loader2 className="h-4 w-4 animate-spin" />} {hasPassword ? "Change" : "Set"}
-                  </button>
-                  {hasPassword && (
-                    <button type="button" onClick={() => savePassword(true)} disabled={busy === "pw"} className="btn btn-ghost">
-                      Remove
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-end gap-3">
-                <div>
-                  <label htmlFor="sd-exp" className="font-medium">
-                    Link expires
-                  </label>
-                  <input
-                    id="sd-exp"
-                    type="date"
-                    value={expires}
-                    min={new Date().toISOString().slice(0, 10)}
-                    onChange={async (e) => {
-                      setExpires(e.target.value);
-                      await update({ expires_at: e.target.value ? new Date(`${e.target.value}T23:59:59`).toISOString() : null }, "exp");
-                    }}
-                    className="field mt-2"
-                  />
-                </div>
-                {expires && (
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={async () => {
-                      setExpires("");
-                      await update({ expires_at: null }, "exp");
-                    }}
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-
               <label className="flex items-center gap-2.5">
                 <input
                   type="checkbox"
@@ -349,22 +350,6 @@ export default function ShareDialog(p: Props) {
                 />
                 Let viewers download the video
               </label>
-
-              <div>
-                <label htmlFor="sd-desc" className="font-medium">
-                  Description
-                </label>
-                <textarea
-                  id="sd-desc"
-                  value={desc}
-                  onChange={(e) => setDesc(e.target.value)}
-                  onBlur={() => update({ description: desc.trim() || null }, "desc")}
-                  maxLength={600}
-                  rows={2}
-                  placeholder="Shown under the title"
-                  className="field mt-2 resize-none"
-                />
-              </div>
 
               <button type="button" onClick={() => copy("embed")} className="btn btn-secondary btn-sm">
                 {copied === "embed" ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
