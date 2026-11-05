@@ -13,6 +13,7 @@ import {
   Pause,
   Play,
   RotateCcw,
+  Scissors,
   Square,
   Video,
 } from "lucide-react";
@@ -84,6 +85,12 @@ export default function Recorder() {
   const accumulatedRef = useRef(0);
   const segmentStartRef = useRef(0);
   const previewRef = useRef<HTMLVideoElement | null>(null);
+  const originalRef = useRef<{ blob: Blob; durationMs: number; mime: string; segments: { t: number; text: string }[] } | null>(null);
+  const [trimOpen, setTrimOpen] = useState(false);
+  const [trimRange, setTrimRange] = useState<[number, number]>([0, 0]);
+  const [trimming, setTrimming] = useState(false);
+  const [trimProgress, setTrimProgress] = useState(0);
+  const [trimmed, setTrimmed] = useState(false);
 
   const setPhaseBoth = useCallback((p: Phase) => {
     phaseRef.current = p;
@@ -373,6 +380,10 @@ export default function Recorder() {
       } catch {}
     }
     resultRef.current = { blob, durationMs, mime };
+    originalRef.current = { blob, durationMs, mime, segments: [...segmentsRef.current] };
+    setTrimmed(false);
+    setTrimOpen(false);
+    setTrimRange([0, durationMs / 1000]);
     const url = URL.createObjectURL(blob);
     setResultUrl(url);
     setElapsed(durationMs);
@@ -385,7 +396,91 @@ export default function Recorder() {
     setPhaseBoth("review");
   }
 
+  async function applyTrim() {
+    const orig = originalRef.current;
+    if (!orig || trimming) return;
+    const [start, end] = trimRange;
+    if (end - start < 1) {
+      setError("Keep at least one second.");
+      return;
+    }
+    setError(null);
+    setTrimming(true);
+    setTrimProgress(0);
+    try {
+      const v = document.createElement("video");
+      v.src = URL.createObjectURL(orig.blob);
+      v.playsInline = true;
+      await new Promise<void>((res, rej) => {
+        v.onloadedmetadata = () => res();
+        v.onerror = () => rej(new Error("load"));
+      });
+      v.currentTime = start;
+      await new Promise<void>((res) => {
+        v.onseeked = () => res();
+      });
+      const cap = (v as HTMLVideoElement & { captureStream?: () => MediaStream; mozCaptureStream?: () => MediaStream });
+      const stream = (cap.captureStream ?? cap.mozCaptureStream)?.call(v);
+      if (!stream) throw new Error("unsupported");
+      const mime = orig.mime;
+      const rec = new MediaRecorder(stream, { mimeType: mime });
+      const chunks: Blob[] = [];
+      rec.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
+      const done = new Promise<void>((res) => {
+        rec.onstop = () => res();
+      });
+      rec.start(1000);
+      await v.play();
+      await new Promise<void>((res) => {
+        const tick = setInterval(() => {
+          setTrimProgress(Math.min(1, (v.currentTime - start) / (end - start)));
+          if (v.currentTime >= end || v.ended) {
+            clearInterval(tick);
+            res();
+          }
+        }, 100);
+      });
+      v.pause();
+      rec.stop();
+      await done;
+      URL.revokeObjectURL(v.src);
+      const durationMs = Math.round((end - start) * 1000);
+      let blob = new Blob(chunks, { type: mime });
+      if (mime.includes("webm")) {
+        try {
+          blob = await fixWebmDuration(blob, durationMs, { logger: false });
+        } catch {}
+      }
+      resultRef.current = { blob, durationMs, mime };
+      segmentsRef.current = orig.segments
+        .filter((sg) => sg.t >= start && sg.t <= end)
+        .map((sg) => ({ t: sg.t - start, text: sg.text }));
+      setResultUrl(URL.createObjectURL(blob));
+      setElapsed(durationMs);
+      setTrimmed(true);
+      setTrimOpen(false);
+    } catch {
+      setError("Trimming isn't supported in this browser. You can still save the full recording.");
+    } finally {
+      setTrimming(false);
+    }
+  }
+
+  function resetTrim() {
+    const orig = originalRef.current;
+    if (!orig) return;
+    resultRef.current = { blob: orig.blob, durationMs: orig.durationMs, mime: orig.mime };
+    segmentsRef.current = [...orig.segments];
+    setResultUrl(URL.createObjectURL(orig.blob));
+    setElapsed(orig.durationMs);
+    setTrimRange([0, orig.durationMs / 1000]);
+    setTrimmed(false);
+  }
+
   function discard() {
+    originalRef.current = null;
+    setTrimmed(false);
+    setTrimOpen(false);
     teardown();
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
       recorderRef.current.onstop = null;
@@ -597,6 +692,73 @@ export default function Recorder() {
               playsInline
               className="aspect-video w-full rounded-lg bg-black"
             />
+          )}
+          {originalRef.current && (
+            <div className="mt-4">
+              {!trimOpen ? (
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setTrimOpen(true)} disabled={phase === "saving"} className="btn btn-secondary btn-sm">
+                    <Scissors className="h-3.5 w-3.5" /> Trim
+                  </button>
+                  {trimmed && (
+                    <>
+                      <span className="text-xs text-muted">Trimmed to {formatTime(elapsed / 1000)}</span>
+                      <button type="button" onClick={resetTrim} className="btn btn-ghost btn-sm">
+                        Undo trim
+                      </button>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border bg-background p-4 text-sm">
+                  <div className="flex items-center justify-between font-mono text-xs tabular-nums text-muted">
+                    <span>Start {formatTime(trimRange[0])}</span>
+                    <span>End {formatTime(trimRange[1])}</span>
+                  </div>
+                  {(["Start", "End"] as const).map((lab, i) => {
+                    const total = originalRef.current!.durationMs / 1000;
+                    return (
+                      <input
+                        key={lab}
+                        type="range"
+                        aria-label={`${lab} of trimmed video`}
+                        min={0}
+                        max={total}
+                        step={0.1}
+                        value={trimRange[i]}
+                        disabled={trimming}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setTrimRange((r) => {
+                            const next: [number, number] = [r[0], r[1]];
+                            if (i === 0) next[0] = Math.min(val, r[1] - 1);
+                            else next[1] = Math.max(val, r[0] + 1);
+                            if (previewRef.current) previewRef.current.currentTime = next[i];
+                            return next;
+                          });
+                        }}
+                        className="mt-2 w-full accent-[var(--brand)]"
+                      />
+                    );
+                  })}
+                  <p className="mt-2 text-xs text-muted">Trimming plays the clip through once, so it takes as long as the kept part.</p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <button type="button" onClick={applyTrim} disabled={trimming} className="btn btn-primary btn-sm">
+                      {trimming ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Trimming {Math.round(trimProgress * 100)}%
+                        </>
+                      ) : (
+                        "Apply trim"
+                      )}
+                    </button>
+                    <button type="button" onClick={() => setTrimOpen(false)} disabled={trimming} className="btn btn-ghost btn-sm">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
           <div className="mt-5">
             <label htmlFor="rec-title" className="mb-1.5 block text-sm font-medium">
