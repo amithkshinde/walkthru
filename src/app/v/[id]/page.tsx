@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Logo from "@/components/logo";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Viewer, { type Chapter, type Comment, type Reaction } from "@/components/viewer";
@@ -14,7 +15,7 @@ export async function generateMetadata({ params }: Params) {
   if (!UUID.test(id)) return { title: "Walkthru" };
   const supabase = await createClient();
   const { data } = await supabase.from("videos").select("title").eq("id", id).maybeSingle();
-  return { title: data?.title ? `${data.title} — Walkthru` : "Walkthru" };
+  return { title: data?.title ? `${data.title} | Walkthru` : "Walkthru" };
 }
 
 export default async function VideoPage({ params }: Params) {
@@ -51,16 +52,10 @@ export default async function VideoPage({ params }: Params) {
   return (
     <>
       <header className="border-b border-border bg-background">
-        <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-4">
-          <Link href={user ? "/library" : "/"} className="flex items-center gap-2 font-semibold">
-            <span className="inline-block h-3 w-3 rounded-full bg-record" />
-            Walkthru
-          </Link>
-          <Link
-            href={user ? "/record" : "/login"}
-            className="rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-hover"
-          >
-            {user ? "New recording" : "Record your own"}
+        <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
+          <Logo href={user ? "/library" : "/"} />
+          <Link href={user ? "/record" : "/login?next=/record"} className="btn btn-primary btn-sm">
+            {user ? "New recording" : "Start recording"}
           </Link>
         </div>
       </header>

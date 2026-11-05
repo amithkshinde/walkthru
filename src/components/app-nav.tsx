@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogOut, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import Logo from "@/components/logo";
 
 export default function AppNav({ email }: { email?: string | null }) {
   const router = useRouter();
@@ -15,26 +16,15 @@ export default function AppNav({ email }: { email?: string | null }) {
   }
 
   return (
-    <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-4">
-        <Link href="/library" className="flex items-center gap-2 font-semibold">
-          <span className="inline-block h-3 w-3 rounded-full bg-record" />
-          Walkthru
-        </Link>
-        <div className="flex items-center gap-3">
-          {email && <span className="hidden text-sm text-muted sm:inline">{email}</span>}
-          <Link
-            href="/record"
-            className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-hover"
-          >
+    <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
+      <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
+        <Logo href="/library" />
+        <div className="flex items-center gap-2">
+          {email && <span className="mr-2 hidden text-[13px] text-muted md:inline">{email}</span>}
+          <Link href="/record" className="btn btn-primary btn-sm">
             <Plus className="h-4 w-4" /> New recording
           </Link>
-          <button
-            type="button"
-            onClick={signOut}
-            aria-label="Sign out"
-            className="rounded-lg p-2 text-muted hover:bg-surface-muted hover:text-foreground"
-          >
+          <button type="button" onClick={signOut} className="btn btn-ghost btn-sm" aria-label="Sign out">
             <LogOut className="h-4 w-4" />
           </button>
         </div>

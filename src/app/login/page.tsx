@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import Logo from "@/components/logo";
 
 export default function LoginPage() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -49,71 +50,90 @@ export default function LoginPage() {
     setBusy(false);
   }
 
+  const signin = mode === "signin";
+
   return (
-    <main className="flex flex-1 items-center justify-center px-4 py-16">
-      <div className="w-full max-w-sm">
-        <Link href="/" className="mb-8 flex items-center justify-center gap-2 text-lg font-semibold">
-          <span className="inline-block h-3 w-3 rounded-full bg-record" />
-          Walkthru
-        </Link>
-        <div className="rounded-card border border-border bg-surface p-6 shadow-sm">
-          <h1 className="text-xl font-semibold">
-            {mode === "signin" ? "Welcome back" : "Create your account"}
+    <main className="flex flex-1 flex-col items-center px-4 py-10 sm:justify-center">
+      <div className="w-full max-w-[22rem]">
+        <div className="mb-8 flex justify-center">
+          <Logo />
+        </div>
+        <div className="panel p-6 shadow-panel">
+          <h1 className="text-xl font-semibold tracking-tight">
+            {signin ? "Sign in to Walkthru" : "Create your account"}
           </h1>
           <p className="mt-1 text-sm text-muted">
-            {mode === "signin" ? "Sign in to see your recordings." : "Start recording in under a minute."}
+            {signin ? "Pick up where you left off." : "Record and share your first video in a minute."}
           </p>
 
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
-            <label className="block text-sm font-medium">
-              Email
+            <div>
+              <label htmlFor="email" className="mb-1.5 block text-sm font-medium">
+                Email
+              </label>
               <input
+                id="email"
                 type="email"
                 required
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+                className="field"
                 placeholder="you@company.com"
               />
-            </label>
-            <label className="block text-sm font-medium">
-              Password
+            </div>
+            <div>
+              <label htmlFor="password" className="mb-1.5 block text-sm font-medium">
+                Password
+              </label>
               <input
+                id="password"
                 type="password"
                 required
                 minLength={6}
+                autoComplete={signin ? "current-password" : "new-password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
-                placeholder="At least 6 characters"
+                className="field"
+                aria-describedby={signin ? undefined : "password-hint"}
               />
-            </label>
+              {!signin && (
+                <p id="password-hint" className="mt-1.5 text-xs text-muted">
+                  Use at least 6 characters.
+                </p>
+              )}
+            </div>
 
-            {error && <p className="rounded-lg bg-record-soft px-3 py-2 text-sm text-record">{error}</p>}
-            {notice && <p className="rounded-lg bg-brand-soft px-3 py-2 text-sm text-brand">{notice}</p>}
+            {error && (
+              <p role="alert" className="rounded-lg bg-record-soft px-3 py-2 text-sm text-record">
+                {error}
+              </p>
+            )}
+            {notice && (
+              <p role="status" className="rounded-lg bg-brand-soft px-3 py-2 text-sm text-brand">
+                {notice}
+              </p>
+            )}
 
-            <button
-              type="submit"
-              disabled={busy}
-              className="w-full rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-hover disabled:opacity-60"
-            >
-              {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
+            <button type="submit" disabled={busy} className="btn btn-primary w-full">
+              {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+              {busy ? "Please wait" : signin ? "Sign in" : "Create account"}
             </button>
           </form>
         </div>
 
-        <p className="mt-4 text-center text-sm text-muted">
-          {mode === "signin" ? "New here?" : "Already have an account?"}{" "}
+        <p className="mt-5 text-center text-sm text-muted">
+          {signin ? "New to Walkthru?" : "Already have an account?"}{" "}
           <button
             type="button"
             onClick={() => {
-              setMode(mode === "signin" ? "signup" : "signin");
+              setMode(signin ? "signup" : "signin");
               setError(null);
               setNotice(null);
             }}
             className="font-medium text-brand hover:underline"
           >
-            {mode === "signin" ? "Create an account" : "Sign in"}
+            {signin ? "Create an account" : "Sign in"}
           </button>
         </p>
       </div>

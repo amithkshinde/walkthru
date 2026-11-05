@@ -468,13 +468,13 @@ export default function Recorder() {
   const active = phase === "recording" || phase === "paused";
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div className="mx-auto w-full max-w-xl">
       {phase === "idle" || phase === "starting" ? (
-        <div className="rounded-card border border-border bg-surface p-6 shadow-sm">
-          <h1 className="text-xl font-semibold">New recording</h1>
-          <p className="mt-1 text-sm text-muted">Choose what to capture. You&apos;ll get a shareable link the moment you stop.</p>
+        <div className="panel p-6 shadow-panel sm:p-8">
+          <h1 className="text-2xl font-semibold tracking-tight">New recording</h1>
+          <p className="mt-1.5 text-sm text-muted">Choose what to capture. You get a shareable link the moment you stop.</p>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          <div role="radiogroup" aria-label="What to capture" className="mt-6 grid gap-2.5 sm:grid-cols-3">
             {MODES.map((m) => {
               const Icon = m.icon;
               const selected = mode === m.id;
@@ -482,16 +482,18 @@ export default function Recorder() {
                 <button
                   key={m.id}
                   type="button"
+                  role="radio"
+                  aria-checked={selected}
                   onClick={() => setMode(m.id)}
-                  className={`rounded-xl border p-4 text-left transition-colors ${
+                  className={`rounded-lg border p-4 text-left transition-colors ${
                     selected
-                      ? "border-brand bg-brand-soft"
-                      : "border-border bg-background hover:border-brand/50"
+                      ? "border-brand bg-brand-soft ring-1 ring-brand"
+                      : "border-border-strong bg-surface hover:bg-surface-muted"
                   }`}
                 >
-                  <Icon className={`h-5 w-5 ${selected ? "text-brand" : "text-muted"}`} />
+                  <Icon className={`h-5 w-5 ${selected ? "text-brand" : "text-muted"}`} aria-hidden />
                   <div className="mt-3 text-sm font-medium">{m.label}</div>
-                  <div className="mt-0.5 text-xs text-muted">{m.hint}</div>
+                  <div className="mt-0.5 text-xs leading-snug text-muted">{m.hint}</div>
                 </button>
               );
             })}
@@ -499,27 +501,35 @@ export default function Recorder() {
 
           <button
             type="button"
+            role="switch"
+            aria-checked={micOn}
             onClick={() => setMicOn((v) => !v)}
-            className="mt-4 flex w-full items-center justify-between rounded-xl border border-border bg-background px-4 py-3 text-sm"
+            className="mt-3 flex w-full items-center justify-between rounded-lg border border-border-strong bg-surface px-4 py-3 text-sm transition-colors hover:bg-surface-muted"
           >
-            <span className="flex items-center gap-2">
-              {micOn ? <Mic className="h-4 w-4 text-brand" /> : <MicOff className="h-4 w-4 text-muted" />}
+            <span className="flex items-center gap-2.5">
+              {micOn ? <Mic className="h-4 w-4 text-brand" aria-hidden /> : <MicOff className="h-4 w-4 text-muted" aria-hidden />}
               Microphone
             </span>
-            <span className={micOn ? "font-medium text-brand" : "text-muted"}>{micOn ? "On" : "Off"}</span>
+            <span
+              aria-hidden
+              className={`relative h-5 w-9 rounded-full transition-colors ${micOn ? "bg-brand" : "bg-border-strong"}`}
+            >
+              <span
+                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-[left] ${micOn ? "left-[1.1rem]" : "left-0.5"}`}
+              />
+            </span>
           </button>
 
-          {error && <p className="mt-4 rounded-lg bg-record-soft px-3 py-2 text-sm text-record">{error}</p>}
+          {error && (
+            <p role="alert" className="mt-4 rounded-lg bg-record-soft px-3 py-2 text-sm text-record">
+              {error}
+            </p>
+          )}
 
-          <button
-            type="button"
-            onClick={begin}
-            disabled={phase === "starting"}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-record px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
-          >
+          <button type="button" onClick={begin} disabled={phase === "starting"} className="btn btn-lg btn-record mt-6 w-full">
             {phase === "starting" ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Waiting for permissions…
+                <Loader2 className="h-4 w-4 animate-spin" /> Waiting for permissions
               </>
             ) : (
               <>
@@ -528,63 +538,47 @@ export default function Recorder() {
             )}
           </button>
           <p className="mt-3 text-center text-xs text-muted">
-            Tip: your live speech is transcribed in Chrome and Edge, so AI summaries work automatically.
+            Live speech is transcribed in Chrome and Edge, so summaries are generated automatically.
           </p>
         </div>
       ) : null}
 
       {phase === "countdown" ? (
-        <div className="flex flex-col items-center justify-center rounded-card border border-border bg-surface py-24 shadow-sm">
-          <div className="text-8xl font-semibold tabular-nums text-brand">{count}</div>
-          <p className="mt-4 text-sm text-muted">Recording starts in a moment…</p>
+        <div className="panel flex flex-col items-center justify-center py-24 shadow-panel" role="status" aria-live="polite">
+          <div className="text-8xl font-semibold tabular-nums tracking-tight text-brand">{count}</div>
+          <p className="mt-4 text-sm text-muted">Recording starts in a moment</p>
         </div>
       ) : null}
 
       {active ? (
-        <div className="rounded-card border border-border bg-surface p-8 text-center shadow-sm">
-          <div className="flex items-center justify-center gap-3">
-            <span
-              className={`h-3 w-3 rounded-full bg-record ${phase === "recording" ? "animate-pulse-record" : "opacity-40"}`}
-            />
-            <span className="text-sm font-medium text-muted">{phase === "recording" ? "Recording" : "Paused"}</span>
+        <div className="panel p-8 text-center shadow-panel sm:p-10">
+          <div className="inline-flex items-center gap-2 rounded-full bg-record-soft px-3 py-1 text-sm font-medium text-record">
+            <span className={`h-2 w-2 rounded-full bg-record ${phase === "recording" ? "animate-pulse-record" : "opacity-50"}`} />
+            {phase === "recording" ? "Recording" : "Paused"}
           </div>
-          <div className="mt-4 text-6xl font-semibold tabular-nums">{formatTime(elapsed / 1000)}</div>
-          <p className="mt-3 text-sm text-muted">
+          <div className="mt-5 font-mono text-6xl font-medium tabular-nums tracking-tight sm:text-7xl">
+            {formatTime(elapsed / 1000)}
+          </div>
+          <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-muted">
             {mode === "cam"
-              ? "Camera is recording."
-              : "You can switch to the window you want to show. We'll keep recording."}
+              ? "Your camera is recording."
+              : "Switch to the window you want to show. Recording continues in the background."}
           </p>
 
-          <div className="mt-8 flex items-center justify-center gap-3">
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-2.5">
             {phase === "recording" ? (
-              <button
-                type="button"
-                onClick={pause}
-                className="flex items-center gap-2 rounded-xl border border-border bg-background px-5 py-3 text-sm font-medium hover:border-brand/50"
-              >
+              <button type="button" onClick={pause} className="btn btn-secondary">
                 <Pause className="h-4 w-4" /> Pause
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={resume}
-                className="flex items-center gap-2 rounded-xl border border-border bg-background px-5 py-3 text-sm font-medium hover:border-brand/50"
-              >
+              <button type="button" onClick={resume} className="btn btn-secondary">
                 <Play className="h-4 w-4" /> Resume
               </button>
             )}
-            <button
-              type="button"
-              onClick={stop}
-              className="flex items-center gap-2 rounded-xl bg-record px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
-            >
-              <Square className="h-4 w-4 fill-white" /> Stop
+            <button type="button" onClick={stop} className="btn btn-record">
+              <Square className="h-3.5 w-3.5 fill-white" /> Stop and review
             </button>
-            <button
-              type="button"
-              onClick={discard}
-              className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm text-muted hover:text-foreground"
-            >
+            <button type="button" onClick={discard} className="btn btn-ghost">
               <RotateCcw className="h-4 w-4" /> Restart
             </button>
           </div>
@@ -592,52 +586,49 @@ export default function Recorder() {
       ) : null}
 
       {phase === "review" || phase === "saving" ? (
-        <div className="rounded-card border border-border bg-surface p-6 shadow-sm">
+        <div className="panel p-5 shadow-panel sm:p-6">
           {resultUrl && (
             <video
               ref={previewRef}
               src={resultUrl}
               controls
               playsInline
-              className="aspect-video w-full rounded-xl bg-black"
+              className="aspect-video w-full rounded-lg bg-black"
             />
           )}
-          <label className="mt-5 block text-sm font-medium">
-            Title
+          <div className="mt-5">
+            <label htmlFor="rec-title" className="mb-1.5 block text-sm font-medium">
+              Title
+            </label>
             <input
+              id="rec-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               maxLength={120}
-              className="mt-1.5 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
-              placeholder="Give your recording a title"
+              className="field"
+              placeholder="Untitled recording"
             />
-          </label>
+          </div>
 
-          {error && <p className="mt-4 rounded-lg bg-record-soft px-3 py-2 text-sm text-record">{error}</p>}
+          {error && (
+            <p role="alert" className="mt-4 rounded-lg bg-record-soft px-3 py-2 text-sm text-record">
+              {error}
+            </p>
+          )}
 
-          <div className="mt-5 flex items-center gap-3">
-            <button
-              type="button"
-              onClick={save}
-              disabled={phase === "saving"}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
-            >
+          <div className="mt-5 flex items-center gap-2.5">
+            <button type="button" onClick={save} disabled={phase === "saving"} className="btn btn-primary flex-1">
               {phase === "saving" ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Uploading…
+                  <Loader2 className="h-4 w-4 animate-spin" /> Uploading
                 </>
               ) : (
                 <>
-                  <Link2 className="h-4 w-4" /> Save &amp; get link
+                  <Link2 className="h-4 w-4" /> Save and get link
                 </>
               )}
             </button>
-            <button
-              type="button"
-              onClick={discard}
-              disabled={phase === "saving"}
-              className="rounded-xl border border-border px-4 py-3 text-sm font-medium hover:border-record hover:text-record disabled:opacity-60"
-            >
+            <button type="button" onClick={discard} disabled={phase === "saving"} className="btn btn-secondary">
               Re-record
             </button>
           </div>

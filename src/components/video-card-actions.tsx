@@ -34,23 +34,25 @@ export default function VideoCardActions({
   }
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="-mr-1.5 flex shrink-0 items-center">
       <button
         type="button"
         onClick={copy}
-        className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-muted hover:bg-surface-muted hover:text-foreground"
+        aria-label={copied ? "Link copied" : "Copy link"}
+        title={copied ? "Link copied" : "Copy link"}
+        className="btn btn-ghost h-8 w-8 px-0"
       >
-        {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Link2 className="h-3.5 w-3.5" />}
-        {copied ? "Copied" : "Copy link"}
+        {copied ? <Check className="h-4 w-4 text-success" /> : <Link2 className="h-4 w-4" />}
       </button>
       <button
         type="button"
         onClick={remove}
         disabled={deleting}
         aria-label="Delete recording"
-        className="rounded-lg p-1.5 text-muted hover:bg-record-soft hover:text-record disabled:opacity-50"
+        title="Delete recording"
+        className="btn btn-ghost h-8 w-8 px-0 hover:!bg-record-soft hover:!text-record"
       >
-        <Trash2 className="h-3.5 w-3.5" />
+        <Trash2 className="h-4 w-4" />
       </button>
     </div>
   );

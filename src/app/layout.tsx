@@ -4,7 +4,7 @@ import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Walkthru — record, share, get feedback",
+  title: "Walkthru: record, share, get feedback",
   description:
     "Record your screen and camera, share a link instantly, and collect timestamped feedback. AI transcripts and summaries built in.",
 };

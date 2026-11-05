@@ -1,35 +1,50 @@
 @import "tailwindcss";
 
+/*
+  Design tokens.
+  One cool-neutral ramp, one accent (cobalt), one semantic red reserved for
+  recording and destructive actions. Radii: 8px controls, 12px panels, pill for chips.
+*/
 :root {
-  --background: #fafaf9;
+  --background: #f6f7f9;
   --surface: #ffffff;
-  --surface-muted: #f4f4f2;
-  --foreground: #16161a;
-  --muted: #6b6b76;
-  --border: #e6e6e2;
-  --brand: #5b5bf0;
-  --brand-hover: #4a4adf;
-  --brand-soft: #eeeefe;
-  --record: #ff4545;
-  --record-soft: #ffeceb;
-  --success: #16a34a;
-  --radius: 14px;
+  --surface-muted: #eef0f3;
+  --foreground: #0f1115;
+  --muted: #596070;
+  --subtle: #8a91a0;
+  --border: #e3e6ec;
+  --border-strong: #cfd4de;
+  --brand: #2450e8;
+  --brand-hover: #1b3fc4;
+  --brand-soft: #e9eefd;
+  --on-brand: #ffffff;
+  --record: #d92d43;
+  --record-soft: #fdecee;
+  --success: #12804a;
+  --radius: 12px;
+  --shadow-panel: 0 1px 2px rgb(15 17 21 / 0.04), 0 8px 24px -12px rgb(15 17 21 / 0.12);
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0e0e11;
-    --surface: #17171c;
-    --surface-muted: #1f1f26;
-    --foreground: #f2f2f4;
-    --muted: #9a9aa6;
-    --border: #2a2a33;
-    --brand: #7c7cff;
-    --brand-hover: #9393ff;
-    --brand-soft: #23233f;
-    --record: #ff5c5c;
-    --record-soft: #3a1d1f;
+    --background: #0b0c0f;
+    --surface: #13151a;
+    --surface-muted: #1b1e25;
+    --foreground: #eceef2;
+    --muted: #a0a7b5;
+    --subtle: #727a8a;
+    --border: #23262e;
+    --border-strong: #343843;
+    --brand: #7c97ff;
+    --brand-hover: #98adff;
+    --brand-soft: #1a2240;
+    --on-brand: #0b0c0f;
+    --record: #ff6b7d;
+    --record-soft: #2e1519;
     --success: #4ade80;
+    --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -12px rgb(0 0 0 / 0.5);
+    color-scheme: dark;
   }
 }
 
@@ -39,14 +54,18 @@
   --color-surface-muted: var(--surface-muted);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-brand: var(--brand);
   --color-brand-hover: var(--brand-hover);
   --color-brand-soft: var(--brand-soft);
+  --color-on-brand: var(--on-brand);
   --color-record: var(--record);
   --color-record-soft: var(--record-soft);
   --color-success: var(--success);
   --radius-card: var(--radius);
+  --shadow-panel: var(--shadow-panel);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -55,13 +74,98 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--brand) 28%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+/* Shared controls. Every button and field in the app comes from here. */
+@layer components {
+  .btn {
+    @apply inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 text-sm font-medium transition-[background-color,border-color,color,transform] duration-150 active:translate-y-px disabled:pointer-events-none disabled:opacity-50;
+  }
+  .btn-sm {
+    @apply h-8 px-3 text-[13px];
+  }
+  .btn-lg {
+    @apply h-11 px-5 text-[15px];
+  }
+  .btn-primary {
+    @apply bg-brand text-on-brand hover:bg-brand-hover;
+  }
+  .btn-record {
+    @apply bg-record text-white hover:brightness-95;
+  }
+  .btn-secondary {
+    @apply border border-border-strong bg-surface text-foreground hover:bg-surface-muted;
+  }
+  .btn-ghost {
+    @apply text-muted hover:bg-surface-muted hover:text-foreground;
+  }
+  .field {
+    @apply w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm text-foreground placeholder:text-subtle outline-none transition-[border-color,box-shadow] focus:border-brand focus:ring-4 focus:ring-brand/15;
+  }
+  .panel {
+    @apply rounded-card border border-border bg-surface;
+  }
 }
 
 @keyframes pulse-record {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.55; transform: scale(0.85); }
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.85);
+  }
 }
 
 .animate-pulse-record {
   animation: pulse-record 1.2s ease-in-out infinite;
+}
+
+/* One authored moment: the landing preview settles in on first load. */
+@keyframes settle-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.settle-in {
+  animation: settle-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-record,
+  .settle-in {
+    animation: none;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+  }
 }
