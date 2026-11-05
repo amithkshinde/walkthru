@@ -257,12 +257,13 @@ export default function ShareDialog(p: Props) {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-5 border-t border-border pt-6 text-sm sm:grid-cols-2">
+          <div className="mt-6 grid gap-5 border-t border-border pt-6 text-sm">
+          {restricted && (
           <div>
             <label htmlFor="sd-pw" className="font-medium">
               Password {hasPassword && <span className="ml-1 text-xs font-normal text-success">on</span>}
             </label>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-2 flex gap-2">
               <input
                 id="sd-pw"
                 type="password"
@@ -271,7 +272,7 @@ export default function ShareDialog(p: Props) {
                 onChange={(e) => setPassword(e.target.value)}
                 maxLength={100}
                 placeholder={hasPassword ? "Set a new password" : "Add a password"}
-                className="field max-w-xs"
+                className="field min-w-0 flex-1"
               />
               <button type="button" onClick={() => savePassword(false)} disabled={busy === "pw" || !password} className="btn btn-secondary">
                 {busy === "pw" && <Loader2 className="h-4 w-4 animate-spin" />} {hasPassword ? "Change" : "Set"}
@@ -283,6 +284,7 @@ export default function ShareDialog(p: Props) {
               )}
             </div>
           </div>
+          )}
 
           <div className="flex flex-wrap items-end gap-3">
             <div>
