@@ -5,7 +5,7 @@ import { Check, Download, Eye, Link2, Loader2, MessageSquare, Send, Sparkles, Tr
 import AiDocs, { type AiOutputs } from "@/components/ai-docs";
 import InsightsPanel, { type ViewRow } from "@/components/insights-panel";
 import AskVideo from "@/components/ask-video";
-import SharePanel, { type AccessRequest } from "@/components/share-panel";
+import ShareDialog, { type AccessRequest } from "@/components/share-dialog";
 import { track } from "@vercel/analytics";
 import { createClient } from "@/lib/supabase/client";
 import { formatTime, timeAgo } from "@/lib/format";
@@ -43,6 +43,7 @@ export interface ViewerVideo {
   description: string | null;
   expires_at: string | null;
   require_signin: boolean;
+  link_restricted: boolean;
   duration_seconds: number;
   view_count: number;
   created_at: string;
@@ -54,7 +55,7 @@ export interface ViewerVideo {
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
 const EMOJIS = ["👍", "❤️", "😂", "🎉", "👀"];
-type Tab = "summary" | "chapters" | "transcript" | "ask" | "docs" | "insights" | "share";
+type Tab = "summary" | "chapters" | "transcript" | "ask" | "docs" | "insights";
 
 function parseStamp(s: string): number {
   return s.split(":").reduce((acc, part) => acc * 60 + Number(part), 0);
@@ -72,6 +73,7 @@ export default function Viewer({
   views: viewRows,
   shareEmails,
   requests,
+  ownerEmail,
 }: {
   video: ViewerVideo;
   initialComments: Comment[];
@@ -84,6 +86,7 @@ export default function Viewer({
   views: ViewRow[];
   shareEmails: string[];
   requests: AccessRequest[];
+  ownerEmail: string | null;
 }) {
   const supabase = useMemo(() => createClient(unlockToken ?? undefined), [unlockToken]);
   const [ended, setEnded] = useState(false);
@@ -417,6 +420,22 @@ export default function Viewer({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {isOwner && (
+              <ShareDialog
+                videoId={video.id}
+                title={video.title}
+                ownerEmail={ownerEmail}
+                visibility={video.visibility}
+                linkRestricted={video.link_restricted}
+                hasPassword={hasPassword}
+                allowDownload={video.allow_download}
+                expiresAt={video.expires_at}
+                requireSignin={video.require_signin}
+                emails={shareEmails}
+                requests={requests}
+                description={video.description}
+              />
+            )}
             {video.downloadUrl && (
               <a href={video.downloadUrl} className="btn btn-secondary">
                 <Download className="h-4 w-4" aria-hidden /> Download
@@ -479,7 +498,7 @@ export default function Viewer({
             <span className="mr-2 flex items-center gap-1.5 px-1 pb-2.5 text-sm font-semibold">
               <Sparkles className="h-4 w-4 text-brand" aria-hidden /> AI notes
             </span>
-            {((isOwner ? ["summary", "chapters", "transcript", "ask", "docs", "insights", "share"] : ["summary", "chapters", "transcript", "ask", "docs"]) as Tab[]).map((t) => (
+            {((isOwner ? ["summary", "chapters", "transcript", "ask", "docs", "insights"] : ["summary", "chapters", "transcript", "ask", "docs"]) as Tab[]).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -493,11 +512,6 @@ export default function Viewer({
                 }`}
               >
                 {t === "docs" ? "Documents" : t === "ask" ? "Ask" : t}
-                {t === "share" && requests.some((r) => r.status === "pending") && (
-                  <span className="ml-1.5 rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-semibold text-on-brand">
-                    {requests.filter((r) => r.status === "pending").length}
-                  </span>
-                )}
               </button>
             ))}
           </div>
@@ -514,18 +528,6 @@ export default function Viewer({
               />
             ) : tab === "insights" ? (
               <InsightsPanel views={viewRows} duration={duration} totalViews={views} />
-            ) : tab === "share" ? (
-              <SharePanel
-                videoId={video.id}
-                visibility={video.visibility}
-                hasPassword={hasPassword}
-                allowDownload={video.allow_download}
-                expiresAt={video.expires_at}
-                requireSignin={video.require_signin}
-                emails={shareEmails}
-                requests={requests}
-                description={video.description}
-              />
             ) : video.ai_status === "processing" ? (
               <p className="flex items-center gap-2 text-muted">
                 <Loader2 className="h-4 w-4 animate-spin" /> Generating summary and chapters

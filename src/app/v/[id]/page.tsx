@@ -105,7 +105,7 @@ export default async function VideoPage({ params }: Params) {
   const { data: video } = await supabase
     .from("videos")
     .select(
-      "id, owner_id, title, storage_path, duration_seconds, view_count, created_at, summary, transcript, chapters, ai_status, visibility, cta_label, cta_url, allow_download, ai_outputs, description, expires_at, require_signin, folder_id",
+      "id, owner_id, title, storage_path, duration_seconds, view_count, created_at, summary, transcript, chapters, ai_status, visibility, cta_label, cta_url, allow_download, ai_outputs, description, expires_at, require_signin, link_restricted, folder_id",
     )
     .eq("id", id)
     .maybeSingle();
@@ -185,9 +185,11 @@ export default async function VideoPage({ params }: Params) {
           description: video.description,
           expires_at: video.expires_at,
           require_signin: video.require_signin,
+          link_restricted: video.link_restricted,
         }}
         shareEmails={shareEmails}
         requests={requests}
+        ownerEmail={user?.email ?? null}
         initialComments={(comments as Comment[] | null) ?? []}
         initialReactions={(reactions as Reaction[] | null) ?? []}
         userId={user?.id ?? null}
