@@ -61,6 +61,11 @@ function pickMime(): string {
   return MIME_CANDIDATES.find((m) => MediaRecorder.isTypeSupported(m)) ?? "";
 }
 
+// Supabase's free plan caps each upload at 50 MB; stay safely under it.
+const MAX_BYTES = 48_000_000;
+const VIDEO_BPS = 1_200_000;
+const AUDIO_BPS = 64_000;
+
 async function makeThumbnail(blob: Blob): Promise<Blob | null> {
   const url = URL.createObjectURL(blob);
   try {
@@ -117,6 +122,9 @@ export default function Recorder() {
   const segmentStartRef = useRef(0);
   const bubbleRef = useRef<{ corner: "bl" | "br" | "tl" | "tr"; size: number }>({ corner: "bl", size: 0.13 });
   const [bubble, setBubble] = useState<{ corner: "bl" | "br" | "tl" | "tr"; size: number }>({ corner: "bl", size: 0.13 });
+  const bytesRef = useRef(0);
+  const [sizeBytes, setSizeBytes] = useState(0);
+  const [limitHit, setLimitHit] = useState(false);
   const previewRef = useRef<HTMLVideoElement | null>(null);
   const originalRef = useRef<{ blob: Blob; durationMs: number; mime: string; segments: { t: number; text: string }[] } | null>(null);
   const [trimOpen, setTrimOpen] = useState(false);
@@ -340,10 +348,21 @@ export default function Recorder() {
       const mime = pickMime();
       const recorder = new MediaRecorder(new MediaStream([...videoTracks, ...audioTracks]), {
         ...(mime ? { mimeType: mime } : {}),
-        videoBitsPerSecond: 2_500_000,
+        videoBitsPerSecond: VIDEO_BPS,
+        audioBitsPerSecond: AUDIO_BPS,
       });
+      bytesRef.current = 0;
+      setSizeBytes(0);
+      setLimitHit(false);
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+        if (e.data.size <= 0) return;
+        chunksRef.current.push(e.data);
+        bytesRef.current += e.data.size;
+        setSizeBytes(bytesRef.current);
+        if (bytesRef.current >= MAX_BYTES && (phaseRef.current === "recording" || phaseRef.current === "paused")) {
+          setLimitHit(true);
+          stop();
+        }
       };
       recorder.onstop = () => finalize(recorder.mimeType || mime || "video/webm");
       recorderRef.current = recorder;
@@ -457,7 +476,7 @@ export default function Recorder() {
       const stream = (cap.captureStream ?? cap.mozCaptureStream)?.call(v);
       if (!stream) throw new Error("unsupported");
       const mime = orig.mime;
-      const rec = new MediaRecorder(stream, { mimeType: mime });
+      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: VIDEO_BPS, audioBitsPerSecond: AUDIO_BPS });
       const chunks: Blob[] = [];
       rec.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
       const done = new Promise<void>((res) => {
@@ -534,6 +553,13 @@ export default function Recorder() {
   async function save() {
     const result = resultRef.current;
     if (!result) return;
+    if (result.blob.size > MAX_BYTES) {
+      const mb = Math.round(result.blob.size / 1e6);
+      const mins = Math.max(1, Math.floor((result.durationMs / 60000) * (MAX_BYTES / result.blob.size)));
+      setError(`This recording is ${mb} MB and the limit is ${Math.round(MAX_BYTES / 1e6)} MB. Trim it to about ${mins} minute${mins === 1 ? "" : "s"} or less, then save.`);
+      setTrimOpen(true);
+      return;
+    }
     setPhaseBoth("saving");
     setError(null);
     try {
@@ -680,6 +706,11 @@ export default function Recorder() {
             </span>
           </button>
 
+          {limitHit && (
+            <p role="status" className="mt-4 rounded-lg bg-surface-muted px-3 py-2 text-sm text-muted">
+              Recording stopped at the {Math.round(MAX_BYTES / 1e6)} MB limit, about {Math.max(1, Math.round(elapsed / 60000))} minutes. Save it, then record the next part.
+            </p>
+          )}
           {error && (
             <p role="alert" className="anim-alert mt-4 rounded-lg bg-record-soft px-3 py-2 text-sm text-record">
               {error}
@@ -737,6 +768,15 @@ export default function Recorder() {
                 <Play className="h-4 w-4" /> Resume
               </button>
             )}
+            <div className="w-full" aria-live="polite">
+              <div className="h-1 overflow-hidden rounded-full bg-surface-muted" role="progressbar" aria-label="Recording size" aria-valuemin={0} aria-valuemax={MAX_BYTES} aria-valuenow={sizeBytes}>
+                <div className={`h-full rounded-full transition-[width] ${sizeBytes > MAX_BYTES * 0.85 ? "bg-record" : "bg-brand"}`} style={{ width: `${Math.min(100, (sizeBytes / MAX_BYTES) * 100)}%` }} />
+              </div>
+              <p className={`mt-1.5 text-center text-xs ${sizeBytes > MAX_BYTES * 0.85 ? "text-record" : "text-muted"}`}>
+                {Math.round(sizeBytes / 1e6)} MB of {Math.round(MAX_BYTES / 1e6)} MB
+                {sizeBytes > MAX_BYTES * 0.85 ? ". Recording stops automatically at the limit." : ""}
+              </p>
+            </div>
             {mode === "screen-cam" && (
               <div className="flex w-full items-center justify-center gap-3 text-xs text-muted" role="group" aria-label="Camera bubble">
                 <span>Camera</span>
