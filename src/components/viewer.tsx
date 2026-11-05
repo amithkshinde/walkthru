@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Download, Eye, Link2, Loader2, MessageSquare, Send, Sparkles, Trash2 } from "lucide-react";
 import AiDocs, { type AiOutputs } from "@/components/ai-docs";
 import InsightsPanel, { type ViewRow } from "@/components/insights-panel";
+import PlayerControls from "@/components/player-controls";
 import AskVideo from "@/components/ask-video";
 import ShareDialog, { type AccessRequest } from "@/components/share-dialog";
 import { track } from "@vercel/analytics";
@@ -93,6 +94,7 @@ export default function Viewer({
   const watchedSet = useRef<Set<number>>(new Set());
   const lastSent = useRef(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const playerRef = useRef<HTMLDivElement | null>(null);
   const [video, setVideo] = useState(initialVideo);
   const [comments, setComments] = useState(initialComments);
   const [reactions, setReactions] = useState(initialReactions);
@@ -196,7 +198,7 @@ export default function Viewer({
       else if (k === "c") setCaptions((c) => !c);
       else if (k === "f") {
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-        else el.requestFullscreen?.().catch(() => {});
+        else playerRef.current?.requestFullscreen?.().catch(() => {});
       } else if (k === ">" || (k === "." && e.shiftKey)) setSpeed((s) => Math.min(2, SPEEDS[Math.min(SPEEDS.length - 1, SPEEDS.indexOf(s) + 1)] ?? s));
       else if (k === "<" || (k === "," && e.shiftKey)) setSpeed((s) => SPEEDS[Math.max(0, SPEEDS.indexOf(s) - 1)] ?? s);
     }
@@ -355,11 +357,10 @@ export default function Viewer({
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_22.5rem]">
       <section className="min-w-0">
-        <div className="group relative overflow-hidden rounded-card bg-black shadow-panel">
+        <div ref={playerRef} className="relative overflow-hidden rounded-card bg-black shadow-panel">
           <video
             ref={videoRef}
             src={video.url}
-            controls
             playsInline
             preload="metadata"
             onPlay={onPlay}
@@ -380,64 +381,23 @@ export default function Viewer({
             }}
             className="aspect-video w-full"
           />
-          <div
-            role="group"
-            aria-label="Playback options"
-            className="absolute right-3 top-3 flex items-center gap-1.5 rounded-lg bg-black/65 p-1 opacity-0 backdrop-blur transition-opacity duration-150 focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
-          >
-            <label className="sr-only" htmlFor="speed">
-              Playback speed
-            </label>
-            <select
-              id="speed"
-              value={speed}
-              onChange={(e) => setSpeed(Number(e.target.value))}
-              className="h-7 rounded-md bg-transparent px-1.5 text-xs font-medium text-white outline-none hover:bg-white/15 [&>option]:text-black"
-            >
-              {SPEEDS.map((sp) => (
-                <option key={sp} value={sp}>
-                  {sp}x
-                </option>
-              ))}
-            </select>
-            {transcriptLines.length > 0 && (
-              <button
-                type="button"
-                aria-pressed={captions}
-                aria-label="Captions"
-                title="Captions (C)"
-                onClick={() => setCaptions((c) => !c)}
-                className={`h-7 rounded-md px-2 text-xs font-semibold ${captions ? "bg-white text-black" : "text-white hover:bg-white/15"}`}
-              >
-                CC
-              </button>
-            )}
-          </div>
+          <PlayerControls
+            videoRef={videoRef}
+            containerRef={playerRef}
+            duration={duration}
+            markers={topLevel.map((c) => ({ id: c.id, t: c.timestamp_seconds, label: `${c.author_name} at ${formatTime(c.timestamp_seconds)}` }))}
+            speed={speed}
+            onSpeed={setSpeed}
+            captions={captions}
+            onCaptions={setCaptions}
+            hasCaptions={transcriptLines.length > 0}
+            onMarker={seek}
+          />
           {captions && captionLine && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-14 flex justify-center px-4">
+            <div className="pointer-events-none absolute inset-x-0 bottom-16 flex justify-center px-4">
               <p className="max-w-[90%] rounded bg-black/75 px-3 py-1.5 text-center text-sm text-white">{captionLine}</p>
             </div>
           )}
-        </div>
-
-        {/* Comment markers on the timeline */}
-        <div className="relative mt-3 h-5" aria-label="Comment markers">
-          <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-surface-muted" />
-          <div
-            className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-brand"
-            style={{ width: `${Math.min(100, (now / safeDuration) * 100)}%` }}
-          />
-          {topLevel.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => seek(c.timestamp_seconds)}
-              title={`${c.author_name} at ${formatTime(c.timestamp_seconds)}`}
-              aria-label={`Jump to comment by ${c.author_name} at ${formatTime(c.timestamp_seconds)}`}
-              className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background bg-record transition-transform hover:scale-125"
-              style={{ left: `${Math.min(100, (c.timestamp_seconds / safeDuration) * 100)}%` }}
-            />
-          ))}
         </div>
 
         <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
