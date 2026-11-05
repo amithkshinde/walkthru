@@ -470,7 +470,7 @@ export default function Recorder() {
   return (
     <div className="mx-auto w-full max-w-xl">
       {phase === "idle" || phase === "starting" ? (
-        <div className="panel p-6 shadow-panel sm:p-8">
+        <div className="panel anim-rise p-6 shadow-panel sm:p-8">
           <h1 className="text-2xl font-semibold tracking-tight">New recording</h1>
           <p className="mt-1.5 text-sm text-muted">Choose what to capture. You get a shareable link the moment you stop.</p>
 
@@ -521,7 +521,7 @@ export default function Recorder() {
           </button>
 
           {error && (
-            <p role="alert" className="mt-4 rounded-lg bg-record-soft px-3 py-2 text-sm text-record">
+            <p role="alert" className="anim-alert mt-4 rounded-lg bg-record-soft px-3 py-2 text-sm text-record">
               {error}
             </p>
           )}
@@ -545,13 +545,15 @@ export default function Recorder() {
 
       {phase === "countdown" ? (
         <div className="panel flex flex-col items-center justify-center py-24 shadow-panel" role="status" aria-live="polite">
-          <div className="text-8xl font-semibold tabular-nums tracking-tight text-brand">{count}</div>
+          <div key={count} className="anim-tick text-8xl font-semibold tabular-nums tracking-tight text-brand">
+            {count}
+          </div>
           <p className="mt-4 text-sm text-muted">Recording starts in a moment</p>
         </div>
       ) : null}
 
       {active ? (
-        <div className="panel p-8 text-center shadow-panel sm:p-10">
+        <div className="panel anim-fade p-8 text-center shadow-panel sm:p-10">
           <div className="inline-flex items-center gap-2 rounded-full bg-record-soft px-3 py-1 text-sm font-medium text-record">
             <span className={`h-2 w-2 rounded-full bg-record ${phase === "recording" ? "animate-pulse-record" : "opacity-50"}`} />
             {phase === "recording" ? "Recording" : "Paused"}
@@ -586,7 +588,7 @@ export default function Recorder() {
       ) : null}
 
       {phase === "review" || phase === "saving" ? (
-        <div className="panel p-5 shadow-panel sm:p-6">
+        <div className="panel anim-rise p-5 shadow-panel sm:p-6">
           {resultUrl && (
             <video
               ref={previewRef}
@@ -611,7 +613,7 @@ export default function Recorder() {
           </div>
 
           {error && (
-            <p role="alert" className="mt-4 rounded-lg bg-record-soft px-3 py-2 text-sm text-record">
+            <p role="alert" className="anim-alert mt-4 rounded-lg bg-record-soft px-3 py-2 text-sm text-record">
               {error}
             </p>
           )}

@@ -248,7 +248,7 @@ export default function Viewer({
             </div>
           </div>
           <button type="button" onClick={copyLink} className="btn btn-secondary">
-            {copied ? <Check className="h-4 w-4 text-success" /> : <Link2 className="h-4 w-4" />}
+            {copied ? <Check className="anim-pop h-4 w-4 text-success" /> : <Link2 className="h-4 w-4" />}
             {copied ? "Link copied" : "Copy link"}
           </button>
         </div>
@@ -263,7 +263,9 @@ export default function Viewer({
             >
               <span className="text-base leading-none">{emoji}</span>
               {(reactionCounts.get(emoji) ?? 0) > 0 && (
-                <span className="text-xs font-medium tabular-nums text-muted">{reactionCounts.get(emoji)}</span>
+                <span key={reactionCounts.get(emoji)} className="anim-tick text-xs font-medium tabular-nums text-muted">
+                  {reactionCounts.get(emoji)}
+                </span>
               )}
             </button>
           ))}
@@ -292,7 +294,7 @@ export default function Viewer({
               </button>
             ))}
           </div>
-          <div className="p-5 text-sm">
+          <div key={tab} className="anim-fade p-5 text-sm">
             {video.ai_status === "processing" ? (
               <p className="flex items-center gap-2 text-muted">
                 <Loader2 className="h-4 w-4 animate-spin" /> Generating summary and chapters
@@ -373,7 +375,7 @@ export default function Viewer({
               const active = now >= c.timestamp_seconds && now < Math.min(next, c.timestamp_seconds + 8);
               const canDelete = isOwner || (userId !== null && c.author_id === userId);
               return (
-                <li key={c.id} className={`px-4 py-3 transition-colors ${active ? "bg-brand-soft" : ""}`}>
+                <li key={c.id} className={`anim-fade px-4 py-3 transition-colors ${active ? "bg-brand-soft" : ""}`}>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="truncate text-sm font-medium">{c.author_name}</span>

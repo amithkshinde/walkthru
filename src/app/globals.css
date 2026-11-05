@@ -144,24 +144,112 @@ p {
   animation: pulse-record 1.2s ease-in-out infinite;
 }
 
-/* One authored moment: the landing preview settles in on first load. */
-@keyframes settle-in {
+/*
+  Motion system. Ease-out only (things arrive, they do not bounce).
+  Durations: 150ms feedback, 250ms state change, 600ms+ only for the landing entrance.
+  Every class below collapses to no animation under prefers-reduced-motion.
+*/
+:root {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes grow-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes alert-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes tick {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
 
+/* --d sets a per-element delay so a group can be staggered from markup. */
+.anim-rise {
+  animation: rise 0.6s var(--ease-out) both;
+  animation-delay: var(--d, 0ms);
+}
+.anim-fade {
+  animation: fade 0.25s ease-out both;
+  animation-delay: var(--d, 0ms);
+}
+.anim-pop {
+  animation: pop 0.32s var(--ease-out) both;
+  animation-delay: var(--d, 0ms);
+}
+.anim-grow-x {
+  transform-origin: left center;
+  animation: grow-x 0.9s var(--ease-out) both;
+  animation-delay: var(--d, 0ms);
+}
+.anim-alert {
+  animation: alert-in 0.2s var(--ease-out) both;
+}
+.anim-tick {
+  animation: tick 0.28s var(--ease-out) both;
+}
 .settle-in {
-  animation: settle-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: rise 0.8s var(--ease-out) both;
+  animation-delay: var(--d, 0ms);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse-record,
+  .anim-rise,
+  .anim-fade,
+  .anim-pop,
+  .anim-grow-x,
+  .anim-alert,
+  .anim-tick,
   .settle-in {
     animation: none;
   }

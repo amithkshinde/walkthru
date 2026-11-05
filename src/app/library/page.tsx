@@ -60,8 +60,12 @@ export default async function LibraryPage() {
           </div>
         ) : (
           <ul className="grid gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
-            {items.map((v) => (
-              <li key={v.id}>
+            {items.map((v, i) => (
+              <li
+                key={v.id}
+                className="anim-rise"
+                style={{ "--d": `${Math.min(i, 8) * 45}ms` } as React.CSSProperties}
+              >
                 <Link
                   href={`/v/${v.id}`}
                   className="group relative block aspect-video overflow-hidden rounded-card border border-border bg-[#14161c]"

@@ -59,10 +59,10 @@ export default function LoginPage() {
           <Logo />
         </div>
         <div className="panel p-6 shadow-panel">
-          <h1 className="text-xl font-semibold tracking-tight">
+          <h1 key={mode} className="anim-fade text-xl font-semibold tracking-tight">
             {signin ? "Sign in to Walkthru" : "Create your account"}
           </h1>
-          <p className="mt-1 text-sm text-muted">
+          <p key={`${mode}-sub`} className="anim-fade mt-1 text-sm text-muted">
             {signin ? "Pick up where you left off." : "Record and share your first video in a minute."}
           </p>
 
@@ -98,19 +98,19 @@ export default function LoginPage() {
                 aria-describedby={signin ? undefined : "password-hint"}
               />
               {!signin && (
-                <p id="password-hint" className="mt-1.5 text-xs text-muted">
+                <p id="password-hint" className="anim-fade mt-1.5 text-xs text-muted">
                   Use at least 6 characters.
                 </p>
               )}
             </div>
 
             {error && (
-              <p role="alert" className="rounded-lg bg-record-soft px-3 py-2 text-sm text-record">
+              <p role="alert" className="anim-alert rounded-lg bg-record-soft px-3 py-2 text-sm text-record">
                 {error}
               </p>
             )}
             {notice && (
-              <p role="status" className="rounded-lg bg-brand-soft px-3 py-2 text-sm text-brand">
+              <p role="status" className="anim-alert rounded-lg bg-brand-soft px-3 py-2 text-sm text-brand">
                 {notice}
               </p>
             )}

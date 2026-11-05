@@ -35,6 +35,7 @@ function ProductPreview() {
   return (
     <div
       className="settle-in overflow-hidden rounded-2xl border border-border bg-surface shadow-panel"
+      style={{ "--d": "240ms" } as React.CSSProperties}
       role="img"
       aria-label="Example of the Walkthru viewer: a recording with timestamped comments beside it"
     >
@@ -56,12 +57,12 @@ function ProductPreview() {
           </div>
           <div className="relative mt-3 h-4">
             <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-surface-muted" />
-            <div className="absolute left-0 top-1/2 h-1 w-[22%] -translate-y-1/2 rounded-full bg-brand" />
-            {MARKERS.map((m) => (
+            <div className="anim-grow-x absolute left-0 top-1/2 h-1 w-[22%] -translate-y-1/2 rounded-full bg-brand" style={{ "--d": "700ms" } as React.CSSProperties} />
+            {MARKERS.map((m, i) => (
               <span
                 key={m}
-                className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface bg-record"
-                style={{ left: `${m}%` }}
+                style={{ left: `${m}%`, "--d": `${1000 + i * 140}ms` } as React.CSSProperties}
+                className="anim-pop absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface bg-record"
               />
             ))}
           </div>
@@ -74,8 +75,12 @@ function ProductPreview() {
         </div>
 
         <ul className="divide-y divide-border border-t border-border md:border-l md:border-t-0">
-          {PREVIEW_COMMENTS.map((c) => (
-            <li key={c.time} className={`px-3.5 py-3 ${c.active ? "bg-brand-soft" : ""}`}>
+          {PREVIEW_COMMENTS.map((c, i) => (
+            <li
+              key={c.time}
+              style={{ "--d": `${900 + i * 160}ms` } as React.CSSProperties}
+              className={`anim-fade px-3.5 py-3 ${c.active ? "bg-brand-soft" : ""}`}
+            >
               <div className="flex items-center gap-2">
                 <span className="text-[13px] font-medium">{c.name}</span>
                 <span className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-brand">
@@ -126,13 +131,13 @@ export default async function Home() {
       <main className="flex-1">
         <section className="mx-auto grid w-full max-w-6xl items-center gap-12 px-4 pb-20 pt-16 sm:px-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-14 lg:pb-28 lg:pt-24">
           <div>
-            <h1 className="text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl lg:text-[3.5rem]">
+            <h1 className="anim-rise text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl lg:text-[3.5rem]">
               Review work by showing it.
             </h1>
-            <p className="mt-5 max-w-md text-lg leading-relaxed text-muted">
+            <p className="anim-rise mt-5 max-w-md text-lg leading-relaxed text-muted" style={{ "--d": "80ms" } as React.CSSProperties}>
               Record your screen, share one link, and collect comments pinned to the moment they apply to.
             </p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
+            <div className="anim-rise mt-8 flex flex-wrap items-center gap-3" style={{ "--d": "160ms" } as React.CSSProperties}>
               <Link href={recordHref} className="btn btn-lg btn-primary">
                 <span className="h-2 w-2 rounded-full bg-record ring-2 ring-white/40" />
                 Start recording

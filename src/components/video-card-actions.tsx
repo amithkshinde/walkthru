@@ -42,7 +42,7 @@ export default function VideoCardActions({
         title={copied ? "Link copied" : "Copy link"}
         className="btn btn-ghost h-8 w-8 px-0"
       >
-        {copied ? <Check className="h-4 w-4 text-success" /> : <Link2 className="h-4 w-4" />}
+        {copied ? <Check className="anim-pop h-4 w-4 text-success" /> : <Link2 className="h-4 w-4" />}
       </button>
       <button
         type="button"
