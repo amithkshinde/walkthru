@@ -355,7 +355,7 @@ export default function Viewer({
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_22.5rem]">
       <section className="min-w-0">
-        <div className="relative overflow-hidden rounded-card bg-black shadow-panel">
+        <div className="group relative overflow-hidden rounded-card bg-black shadow-panel">
           <video
             ref={videoRef}
             src={video.url}
@@ -380,6 +380,39 @@ export default function Viewer({
             }}
             className="aspect-video w-full"
           />
+          <div
+            role="group"
+            aria-label="Playback options"
+            className="absolute right-3 top-3 flex items-center gap-1.5 rounded-lg bg-black/65 p-1 opacity-0 backdrop-blur transition-opacity duration-150 focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+          >
+            <label className="sr-only" htmlFor="speed">
+              Playback speed
+            </label>
+            <select
+              id="speed"
+              value={speed}
+              onChange={(e) => setSpeed(Number(e.target.value))}
+              className="h-7 rounded-md bg-transparent px-1.5 text-xs font-medium text-white outline-none hover:bg-white/15 [&>option]:text-black"
+            >
+              {SPEEDS.map((sp) => (
+                <option key={sp} value={sp}>
+                  {sp}x
+                </option>
+              ))}
+            </select>
+            {transcriptLines.length > 0 && (
+              <button
+                type="button"
+                aria-pressed={captions}
+                aria-label="Captions"
+                title="Captions (C)"
+                onClick={() => setCaptions((c) => !c)}
+                className={`h-7 rounded-md px-2 text-xs font-semibold ${captions ? "bg-white text-black" : "text-white hover:bg-white/15"}`}
+              >
+                CC
+              </button>
+            )}
+          </div>
           {captions && captionLine && (
             <div className="pointer-events-none absolute inset-x-0 bottom-14 flex justify-center px-4">
               <p className="max-w-[90%] rounded bg-black/75 px-3 py-1.5 text-center text-sm text-white">{captionLine}</p>
@@ -445,33 +478,7 @@ export default function Viewer({
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2" role="group" aria-label="Playback">
-          <label className="flex items-center gap-2 text-sm text-muted">
-            Speed
-            <select
-              value={speed}
-              onChange={(e) => setSpeed(Number(e.target.value))}
-              className="h-8 rounded-lg border border-border-strong bg-surface px-2 text-sm text-foreground"
-            >
-              {SPEEDS.map((s) => (
-                <option key={s} value={s}>
-                  {s}x
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            aria-pressed={captions}
-            disabled={transcriptLines.length === 0}
-            onClick={() => setCaptions((c) => !c)}
-            className={`h-8 rounded-lg border px-3 text-sm disabled:opacity-50 ${captions ? "border-brand bg-brand-soft text-brand" : "border-border-strong bg-surface text-muted"}`}
-          >
-            Captions
-          </button>
-          <span className="hidden text-xs text-subtle md:inline">K play, J/L skip 10s, M mute, C captions, F fullscreen</span>
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2" role="group" aria-label="Reactions">
+        <div className="mt-4 flex flex-wrap items-center gap-2" role="group" aria-label="Reactions">
           {EMOJIS.map((emoji) => (
             <button
               key={emoji}
