@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Copy, Globe, Link2, Loader2, Lock, Settings2, Share2, X } from "lucide-react";
+import { Check, Copy, Globe, Link2, Loader2, Lock, Share2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 export interface AccessRequest {
@@ -39,7 +39,6 @@ export default function ShareDialog(p: Props) {
   const [allowDownload, setAllowDownload] = useState(p.allowDownload);
   const [expires, setExpires] = useState(p.expiresAt ? p.expiresAt.slice(0, 10) : "");
   const [signin, setSignin] = useState(p.requireSignin);
-  const [moreOpen, setMoreOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [copied, setCopied] = useState<"link" | "embed" | null>(null);
@@ -319,17 +318,7 @@ export default function ShareDialog(p: Props) {
 
           </div>
 
-          <button
-            type="button"
-            onClick={() => setMoreOpen((o) => !o)}
-            aria-expanded={moreOpen}
-            className="mt-5 flex items-center gap-2 text-sm font-medium text-muted hover:text-foreground"
-          >
-            <Settings2 className="h-4 w-4" aria-hidden /> Link settings
-          </button>
-
-          {moreOpen && (
-            <div className="anim-fade mt-4 space-y-5 rounded-lg border border-border bg-background p-4 text-sm">
+          <div className="mt-5 space-y-4 text-sm">
               <label className="flex items-center gap-2.5">
                 <input
                   type="checkbox"
@@ -357,8 +346,7 @@ export default function ShareDialog(p: Props) {
                 {copied === "embed" ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
                 {copied === "embed" ? "Embed code copied" : "Copy embed code"}
               </button>
-            </div>
-          )}
+          </div>
 
           <div className="mt-6 flex items-center justify-between gap-3">
             <button type="button" onClick={() => copy("link")} className="btn btn-secondary">
