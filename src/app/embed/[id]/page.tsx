@@ -1,3 +1,4 @@
+import { videoUrl } from "@/lib/video-url";
 import { notFound } from "next/navigation";
 import { resolveVideoAccess, UUID } from "@/lib/video-access";
 
@@ -24,14 +25,12 @@ export default async function EmbedPage({ params }: { params: Promise<{ id: stri
   }
 
   const { data: video } = await supabase.from("videos").select("storage_path").eq("id", id).maybeSingle();
-  const signed = video?.storage_path
-    ? await supabase.storage.from("recordings").createSignedUrl(video.storage_path, 60 * 60 * 6)
-    : null;
-  if (!signed?.data?.signedUrl) notFound();
+  const signedUrl = video?.storage_path ? await videoUrl(supabase, video.storage_path, 60 * 60 * 6) : null;
+  if (!signedUrl) notFound();
 
   return (
     <video
-      src={signed.data.signedUrl}
+      src={signedUrl}
       controls
       playsInline
       preload="metadata"

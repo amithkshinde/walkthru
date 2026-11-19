@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { UUID } from "@/lib/video-access";
 import { formatTime } from "@/lib/format";
+import { videoUrl } from "@/lib/video-url";
 
 export const maxDuration = 300;
 
@@ -20,15 +21,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!video || video.owner_id !== user.id || !video.storage_path || video.status !== "ready") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  const { data: signed } = await supabase.storage.from("recordings").createSignedUrl(video.storage_path, 60 * 30);
-  if (!signed?.signedUrl) return NextResponse.json({ error: "Could not read the video" }, { status: 500 });
+  const signedUrl = await videoUrl(supabase, video.storage_path, 60 * 30);
+  if (!signedUrl) return NextResponse.json({ error: "Could not read the video" }, { status: 500 });
 
   const res = await fetch(
     "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&punctuate=true&utterances=true&detect_language=true",
     {
       method: "POST",
       headers: { Authorization: `Token ${key}`, "content-type": "application/json" },
-      body: JSON.stringify({ url: signed.signedUrl }),
+      body: JSON.stringify({ url: signedUrl }),
     },
   );
   if (!res.ok) return NextResponse.json({ error: "Transcription failed" }, { status: 502 });

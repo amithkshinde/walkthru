@@ -33,10 +33,11 @@ export default function VideoCardActions({
   async function remove() {
     if (!window.confirm("Delete this recording? This can't be undone.")) return;
     setDeleting(true);
-    const supabase = createClient();
-    const files = [storagePath, thumbnailPath].filter((x): x is string => !!x);
-    if (files.length) await supabase.storage.from("recordings").remove(files);
-    await supabase.from("videos").delete().eq("id", id);
+    await fetch("/api/videos/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [id] }),
+    }).catch(() => null);
     router.refresh();
   }
 

@@ -6,8 +6,9 @@ import { HardDrive, Loader2, Trash2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatTime, timeAgo } from "@/lib/format";
 
-// Supabase free plan: 1 GB of file storage per project.
-const FREE_BYTES = 1_000_000_000;
+// Supabase free plan: 1 GB of file storage per project. Cloudflare R2 free tier: 10 GB.
+const SUPABASE_BYTES = 1_000_000_000;
+const R2_BYTES = 10_000_000_000;
 
 interface Item {
   id: string;
@@ -29,6 +30,7 @@ export default function StoragePanel({ userId, items }: { userId: string; items:
   const [error, setError] = useState<string | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [r2On, setR2On] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -45,6 +47,14 @@ export default function StoragePanel({ userId, items }: { userId: string; items:
       if (!data || data.length < 100) break;
       offset += 100;
     }
+    try {
+      const res = await fetch("/api/r2/usage");
+      if (res.ok) {
+        const j = (await res.json()) as { enabled: boolean; sizes: Record<string, number> };
+        setR2On(j.enabled);
+        for (const [k, v] of Object.entries(j.sizes)) map.set(k, v);
+      }
+    } catch {}
     setSizes(map);
     setLoading(false);
   }
@@ -56,21 +66,25 @@ export default function StoragePanel({ userId, items }: { userId: string; items:
   }
 
   const sizeOf = (i: Item) => (sizes?.get(i.storage_path ?? "") ?? 0) + (sizes?.get(i.thumbnail_path ?? "") ?? 0);
-  const total = sizes ? [...sizes.values()].reduce((a, b) => a + b, 0) : 0;
+  const total = sizes ? [...sizes.entries()].filter(([k]) => !k.startsWith("r2:")).reduce((a, [, b]) => a + b, 0) : 0;
+  const r2Total = sizes ? [...sizes.entries()].filter(([k]) => k.startsWith("r2:")).reduce((a, [, b]) => a + b, 0) : 0;
   const rows = useMemo(() => [...items].sort((a, b) => sizeOf(b) - sizeOf(a)), [items, sizes]); // eslint-disable-line react-hooks/exhaustive-deps
   const pickedBytes = rows.filter((r) => picked.has(r.id)).reduce((a, r) => a + sizeOf(r), 0);
-  const pct = Math.min(100, (total / FREE_BYTES) * 100);
+  const pct = Math.min(100, (total / SUPABASE_BYTES) * 100);
+  const r2Pct = Math.min(100, (r2Total / R2_BYTES) * 100);
 
   async function removePicked() {
     const chosen = rows.filter((r) => picked.has(r.id));
     if (!chosen.length) return;
     if (!window.confirm(`Delete ${chosen.length} recording${chosen.length === 1 ? "" : "s"}? This can't be undone.`)) return;
     setDeleting(true);
-    const files = chosen.flatMap((r) => [r.storage_path, r.thumbnail_path]).filter((x): x is string => !!x);
-    if (files.length) await supabase.storage.from("recordings").remove(files);
-    const { error: err } = await supabase.from("videos").delete().in("id", chosen.map((r) => r.id));
+    const res = await fetch("/api/videos/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: chosen.map((r) => r.id) }),
+    }).catch(() => null);
     setDeleting(false);
-    if (err) return setError("Some recordings could not be deleted.");
+    if (!res?.ok) return setError("Some recordings could not be deleted.");
     setPicked(new Set());
     await load();
     router.refresh();
@@ -104,13 +118,23 @@ export default function StoragePanel({ userId, items }: { userId: string; items:
           ) : (
             <>
               <div className="mt-4">
-                <div className="h-2 overflow-hidden rounded-full bg-surface-muted" role="progressbar" aria-label="Storage used" aria-valuemin={0} aria-valuemax={FREE_BYTES} aria-valuenow={total}>
+                <div className="h-2 overflow-hidden rounded-full bg-surface-muted" role="progressbar" aria-label="Storage used" aria-valuemin={0} aria-valuemax={SUPABASE_BYTES} aria-valuenow={total}>
                   <div className={`h-full rounded-full transition-[width] ${pct > 85 ? "bg-record" : "bg-brand"}`} style={{ width: `${pct}%` }} />
                 </div>
                 <p className="mt-2 text-sm text-muted">
-                  {mb(total)} of {mb(FREE_BYTES)} used on the free plan
+                  {mb(total)} of {mb(SUPABASE_BYTES)} used in Supabase (older recordings)
                 </p>
               </div>
+              {r2On && (
+                <div className="mt-4">
+                  <div className="h-2 overflow-hidden rounded-full bg-surface-muted" role="progressbar" aria-label="R2 storage used" aria-valuemin={0} aria-valuemax={R2_BYTES} aria-valuenow={r2Total}>
+                    <div className={`h-full rounded-full transition-[width] ${r2Pct > 85 ? "bg-record" : "bg-brand"}`} style={{ width: `${r2Pct}%` }} />
+                  </div>
+                  <p className="mt-2 text-sm text-muted">
+                    {mb(r2Total)} of {mb(R2_BYTES)} used in Cloudflare R2 (new recordings)
+                  </p>
+                </div>
+              )}
 
               {error && (
                 <p role="alert" className="anim-alert mt-3 text-sm text-record">

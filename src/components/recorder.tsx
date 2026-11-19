@@ -63,7 +63,8 @@ function pickMime(): string {
 }
 
 // Supabase's free plan caps each upload at 50 MB; stay safely under it.
-const MAX_BYTES = 48_000_000;
+const SUPABASE_MAX_BYTES = 48_000_000; // Supabase free plan caps a single upload at 50 MB
+const R2_MAX_BYTES = 500_000_000;
 const VIDEO_BPS = 1_200_000;
 const AUDIO_BPS = 64_000;
 
@@ -124,6 +125,19 @@ export default function Recorder() {
   const bubbleRef = useRef<{ corner: "bl" | "br" | "tl" | "tr"; size: number }>({ corner: "bl", size: 0.13 });
   const [bubble, setBubble] = useState<{ corner: "bl" | "br" | "tl" | "tr"; size: number }>({ corner: "bl", size: 0.13 });
   const [speech, setSpeech] = useState<"off" | "listening" | string>("off");
+  const [maxBytes, setMaxBytes] = useState(SUPABASE_MAX_BYTES);
+  const maxBytesRef = useRef(SUPABASE_MAX_BYTES);
+  useEffect(() => {
+    fetch("/api/r2/upload")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { enabled?: boolean } | null) => {
+        if (j?.enabled) {
+          maxBytesRef.current = R2_MAX_BYTES;
+          setMaxBytes(R2_MAX_BYTES);
+        }
+      })
+      .catch(() => {});
+  }, []);
   const bytesRef = useRef(0);
   const [sizeBytes, setSizeBytes] = useState(0);
   const [limitHit, setLimitHit] = useState(false);
@@ -375,7 +389,7 @@ export default function Recorder() {
         chunksRef.current.push(e.data);
         bytesRef.current += e.data.size;
         setSizeBytes(bytesRef.current);
-        if (bytesRef.current >= MAX_BYTES && (phaseRef.current === "recording" || phaseRef.current === "paused")) {
+        if (bytesRef.current >= maxBytesRef.current && (phaseRef.current === "recording" || phaseRef.current === "paused")) {
           setLimitHit(true);
           stop();
         }
@@ -569,10 +583,10 @@ export default function Recorder() {
   async function save() {
     const result = resultRef.current;
     if (!result) return;
-    if (result.blob.size > MAX_BYTES) {
+    if (result.blob.size > maxBytes) {
       const mb = Math.round(result.blob.size / 1e6);
-      const mins = Math.max(1, Math.floor((result.durationMs / 60000) * (MAX_BYTES / result.blob.size)));
-      setError(`This recording is ${mb} MB and the limit is ${Math.round(MAX_BYTES / 1e6)} MB. Trim it to about ${mins} minute${mins === 1 ? "" : "s"} or less, then save.`);
+      const mins = Math.max(1, Math.floor((result.durationMs / 60000) * (maxBytes / result.blob.size)));
+      setError(`This recording is ${mb} MB and the limit is ${Math.round(maxBytes / 1e6)} MB. Trim it to about ${mins} minute${mins === 1 ? "" : "s"} or less, then save.`);
       setTrimOpen(true);
       return;
     }
@@ -590,8 +604,20 @@ export default function Recorder() {
 
       const id = crypto.randomUUID();
       const ext = result.mime.includes("mp4") ? "mp4" : "webm";
-      const path = `${user.id}/${id}.${ext}`;
       const duration = Math.max(1, Math.round(result.durationMs / 1000));
+
+      // Prefer Cloudflare R2 (large files); fall back to Supabase Storage if it isn't set up.
+      let r2: { url: string; path: string; contentType: string } | null = null;
+      if (maxBytesRef.current === R2_MAX_BYTES) {
+        const presign = await fetch("/api/r2/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, mime: result.mime, size: result.blob.size }),
+        });
+        if (presign.ok) r2 = await presign.json();
+        else if (presign.status !== 501) throw new Error("Could not start the upload. Please try again.");
+      }
+      const path = r2 ? r2.path : `${user.id}/${id}.${ext}`;
 
       const { error: insertError } = await supabase.from("videos").insert({
         id,
@@ -605,10 +631,19 @@ export default function Recorder() {
 
       let uploadError: { message: string } | null = null;
       for (let attempt = 0; attempt < 3; attempt++) {
-        const res = await supabase.storage
-          .from("recordings")
-          .upload(path, result.blob, { contentType: result.mime.split(";")[0], upsert: true });
-        uploadError = res.error;
+        if (r2) {
+          try {
+            const put = await fetch(r2.url, { method: "PUT", headers: { "Content-Type": r2.contentType }, body: result.blob });
+            uploadError = put.ok ? null : { message: `Upload failed (${put.status})` };
+          } catch {
+            uploadError = { message: "Upload failed. Check your connection and try again." };
+          }
+        } else {
+          const res = await supabase.storage
+            .from("recordings")
+            .upload(path, result.blob, { contentType: result.mime.split(";")[0], upsert: true });
+          uploadError = res.error;
+        }
         if (!uploadError) break;
         await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
       }
@@ -729,7 +764,7 @@ export default function Recorder() {
           )}
           {limitHit && (
             <p role="status" className="mt-4 rounded-lg bg-surface-muted px-3 py-2 text-sm text-muted">
-              Recording stopped at the {Math.round(MAX_BYTES / 1e6)} MB limit, about {Math.max(1, Math.round(elapsed / 60000))} minutes. Save it, then record the next part.
+              Recording stopped at the {Math.round(maxBytes / 1e6)} MB limit, about {Math.max(1, Math.round(elapsed / 60000))} minutes. Save it, then record the next part.
             </p>
           )}
           {error && (
@@ -803,12 +838,12 @@ export default function Recorder() {
               </p>
             )}
             <div className="w-full" aria-live="polite">
-              <div className="h-1 overflow-hidden rounded-full bg-surface-muted" role="progressbar" aria-label="Recording size" aria-valuemin={0} aria-valuemax={MAX_BYTES} aria-valuenow={sizeBytes}>
-                <div className={`h-full rounded-full transition-[width] ${sizeBytes > MAX_BYTES * 0.85 ? "bg-record" : "bg-brand"}`} style={{ width: `${Math.min(100, (sizeBytes / MAX_BYTES) * 100)}%` }} />
+              <div className="h-1 overflow-hidden rounded-full bg-surface-muted" role="progressbar" aria-label="Recording size" aria-valuemin={0} aria-valuemax={maxBytes} aria-valuenow={sizeBytes}>
+                <div className={`h-full rounded-full transition-[width] ${sizeBytes > maxBytes * 0.85 ? "bg-record" : "bg-brand"}`} style={{ width: `${Math.min(100, (sizeBytes / maxBytes) * 100)}%` }} />
               </div>
-              <p className={`mt-1.5 text-center text-xs ${sizeBytes > MAX_BYTES * 0.85 ? "text-record" : "text-muted"}`}>
-                {Math.round(sizeBytes / 1e6)} MB of {Math.round(MAX_BYTES / 1e6)} MB
-                {sizeBytes > MAX_BYTES * 0.85 ? ". Recording stops automatically at the limit." : ""}
+              <p className={`mt-1.5 text-center text-xs ${sizeBytes > maxBytes * 0.85 ? "text-record" : "text-muted"}`}>
+                {Math.round(sizeBytes / 1e6)} MB of {Math.round(maxBytes / 1e6)} MB
+                {sizeBytes > maxBytes * 0.85 ? ". Recording stops automatically at the limit." : ""}
               </p>
             </div>
             {mode === "screen-cam" && (

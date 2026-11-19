@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Lock, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { resolveVideoAccess, fileSlug, UUID } from "@/lib/video-access";
+import { videoUrl } from "@/lib/video-url";
 import Logo from "@/components/logo";
 import RequestAccess from "@/components/request-access";
 import UnlockForm from "@/components/unlock-form";
@@ -113,12 +114,11 @@ export default async function VideoPage({ params }: Params) {
 
   const isOwner = !!user && user.id === video.owner_id;
 
-  const bucket = supabase.storage.from("recordings");
-  const [{ data: playUrl }, { data: dlUrl }, { data: comments }, { data: reactions }] = await Promise.all([
-    bucket.createSignedUrl(video.storage_path, 60 * 60 * 6),
+  const [playSigned, dlSigned, { data: comments }, { data: reactions }] = await Promise.all([
+    videoUrl(supabase, video.storage_path, 60 * 60 * 6),
     video.allow_download || isOwner
-      ? bucket.createSignedUrl(video.storage_path, 60 * 60 * 6, { download: fileSlug(video.title, video.storage_path) })
-      : Promise.resolve({ data: null }),
+      ? videoUrl(supabase, video.storage_path, 60 * 60 * 6, fileSlug(video.title, video.storage_path))
+      : Promise.resolve(null),
     supabase
       .from("comments")
       .select("id, author_id, author_name, body, timestamp_seconds, created_at, parent_id")
@@ -127,7 +127,7 @@ export default async function VideoPage({ params }: Params) {
     supabase.from("reactions").select("id, emoji, timestamp_seconds").eq("video_id", id),
   ]);
 
-  if (!playUrl?.signedUrl) {
+  if (!playSigned) {
     return (
       <Shell signedIn={signedIn}>
         <div className="mx-auto mt-20 w-full max-w-sm px-4 text-center">
@@ -168,8 +168,8 @@ export default async function VideoPage({ params }: Params) {
         video={{
           id: video.id,
           title: video.title,
-          url: playUrl.signedUrl,
-          downloadUrl: dlUrl?.signedUrl ?? null,
+          url: playSigned,
+          downloadUrl: dlSigned ?? null,
           duration_seconds: video.duration_seconds,
           view_count: video.view_count,
           created_at: video.created_at,

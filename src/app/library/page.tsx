@@ -1,3 +1,4 @@
+import { isR2Path } from "@/lib/r2";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Eye, MessageSquare, Video } from "lucide-react";
@@ -32,7 +33,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
       (!folder || (folder === "none" ? !v.folder_id : v.folder_id === folder)) &&
       (!term || v.title.toLowerCase().includes(term)),
   );
-  const paths = shown.flatMap((v) => (v.thumbnail_path ? [v.thumbnail_path] : v.storage_path ? [v.storage_path] : []));
+  const paths = shown.flatMap((v) => (v.thumbnail_path ? [v.thumbnail_path] : v.storage_path && !isR2Path(v.storage_path) ? [v.storage_path] : []));
   const signed = paths.length ? await supabase.storage.from("recordings").createSignedUrls(paths, 60 * 60) : { data: [] };
   const urlByPath = new Map((signed.data ?? []).map((r) => [r.path, r.signedUrl]));
 
