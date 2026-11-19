@@ -31,6 +31,8 @@ export default function StoragePanel({ userId, items }: { userId: string; items:
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [r2On, setR2On] = useState(false);
+  const [drive, setDrive] = useState<{ configured: boolean; connected: boolean; enabled: boolean } | null>(null);
+  const [driveBusy, setDriveBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -55,6 +57,10 @@ export default function StoragePanel({ userId, items }: { userId: string; items:
         for (const [k, v] of Object.entries(j.sizes)) map.set(k, v);
       }
     } catch {}
+    try {
+      const res = await fetch("/api/drive/status");
+      if (res.ok) setDrive(await res.json());
+    } catch {}
     setSizes(map);
     setLoading(false);
   }
@@ -72,6 +78,27 @@ export default function StoragePanel({ userId, items }: { userId: string; items:
   const pickedBytes = rows.filter((r) => picked.has(r.id)).reduce((a, r) => a + sizeOf(r), 0);
   const pct = Math.min(100, (total / SUPABASE_BYTES) * 100);
   const r2Pct = Math.min(100, (r2Total / R2_BYTES) * 100);
+
+  async function setDriveEnabled(enabled: boolean) {
+    setDriveBusy(true);
+    const res = await fetch("/api/drive/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    }).catch(() => null);
+    if (res?.ok) setDrive((d) => (d ? { ...d, enabled } : d));
+    else setError("Could not change the Google Drive setting.");
+    setDriveBusy(false);
+  }
+
+  async function disconnectDrive() {
+    if (!window.confirm("Disconnect Google Drive? Recordings already saved in your Drive will stop playing until you reconnect.")) return;
+    setDriveBusy(true);
+    const res = await fetch("/api/drive/disconnect", { method: "POST" }).catch(() => null);
+    if (res?.ok) setDrive((d) => (d ? { ...d, connected: false, enabled: false } : d));
+    else setError("Could not disconnect Google Drive.");
+    setDriveBusy(false);
+  }
 
   async function removePicked() {
     const chosen = rows.filter((r) => picked.has(r.id));
@@ -133,6 +160,37 @@ export default function StoragePanel({ userId, items }: { userId: string; items:
                   <p className="mt-2 text-sm text-muted">
                     {mb(r2Total)} of {mb(R2_BYTES)} used in Cloudflare R2 (new recordings)
                   </p>
+                </div>
+              )}
+
+              {drive?.configured && (
+                <div className="mt-5 rounded-xl border border-border p-4">
+                  <p className="text-sm font-medium">Google Drive</p>
+                  {drive.connected ? (
+                    <>
+                      <label className="mt-2 flex cursor-pointer items-center gap-2.5 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={drive.enabled}
+                          disabled={driveBusy}
+                          onChange={(e) => setDriveEnabled(e.target.checked)}
+                          className="h-4 w-4 accent-[var(--brand)]"
+                        />
+                        Save new recordings to my Google Drive
+                      </label>
+                      <p className="mt-1.5 text-xs text-muted">Files go in a &ldquo;Walkthru recordings&rdquo; folder. They don&apos;t count toward Walkthru&apos;s storage, only your Drive&apos;s.</p>
+                      <button type="button" onClick={disconnectDrive} disabled={driveBusy} className="btn btn-ghost btn-sm mt-2 -ml-2.5">
+                        Disconnect
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="mt-1 text-xs text-muted">Store new recordings in your own Google Drive instead of Walkthru&apos;s storage. Walkthru can only see files it creates.</p>
+                      <a href="/api/drive/connect" className="btn btn-secondary btn-sm mt-3">
+                        Connect Google Drive
+                      </a>
+                    </>
+                  )}
                 </div>
               )}
 

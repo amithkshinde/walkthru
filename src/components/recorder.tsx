@@ -64,7 +64,7 @@ function pickMime(): string {
 
 // Supabase's free plan caps each upload at 50 MB; stay safely under it.
 const SUPABASE_MAX_BYTES = 48_000_000; // Supabase free plan caps a single upload at 50 MB
-const R2_MAX_BYTES = 500_000_000;
+const LARGE_MAX_BYTES = 500_000_000; // R2 and Google Drive have no 50 MB cap; the browser's memory is the limit
 const VIDEO_BPS = 1_200_000;
 const AUDIO_BPS = 64_000;
 
@@ -127,16 +127,20 @@ export default function Recorder() {
   const [speech, setSpeech] = useState<"off" | "listening" | string>("off");
   const [maxBytes, setMaxBytes] = useState(SUPABASE_MAX_BYTES);
   const maxBytesRef = useRef(SUPABASE_MAX_BYTES);
+  const destRef = useRef<"supabase" | "r2" | "drive">("supabase");
+  const [dest, setDest] = useState<"supabase" | "r2" | "drive">("supabase");
   useEffect(() => {
-    fetch("/api/r2/upload")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j: { enabled?: boolean } | null) => {
-        if (j?.enabled) {
-          maxBytesRef.current = R2_MAX_BYTES;
-          setMaxBytes(R2_MAX_BYTES);
-        }
-      })
-      .catch(() => {});
+    Promise.all([
+      fetch("/api/drive/status").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch("/api/r2/upload").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ]).then(([drive, r2]: [{ connected?: boolean; enabled?: boolean } | null, { enabled?: boolean } | null]) => {
+      const d = drive?.connected && drive.enabled ? "drive" : r2?.enabled ? "r2" : "supabase";
+      destRef.current = d;
+      setDest(d);
+      const max = d === "supabase" ? SUPABASE_MAX_BYTES : LARGE_MAX_BYTES;
+      maxBytesRef.current = max;
+      setMaxBytes(max);
+    });
   }, []);
   const bytesRef = useRef(0);
   const [sizeBytes, setSizeBytes] = useState(0);
@@ -606,23 +610,26 @@ export default function Recorder() {
       const ext = result.mime.includes("mp4") ? "mp4" : "webm";
       const duration = Math.max(1, Math.round(result.durationMs / 1000));
 
-      // Prefer Cloudflare R2 (large files); fall back to Supabase Storage if it isn't set up.
+      // Destination: the user's Google Drive if switched on, else Cloudflare R2, else Supabase Storage.
+      let dest = destRef.current;
       let r2: { url: string; path: string; contentType: string } | null = null;
-      if (maxBytesRef.current === R2_MAX_BYTES) {
+      if (dest === "r2") {
         const presign = await fetch("/api/r2/upload", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id, mime: result.mime, size: result.blob.size }),
         });
         if (presign.ok) r2 = await presign.json();
-        else if (presign.status !== 501) throw new Error("Could not start the upload. Please try again.");
+        else if (presign.status === 501) dest = "supabase";
+        else throw new Error("Could not start the upload. Please try again.");
       }
-      const path = r2 ? r2.path : `${user.id}/${id}.${ext}`;
+      const recTitle = title.trim() || "Untitled recording";
+      const path = dest === "drive" ? "gdrive:pending" : r2 ? r2.path : `${user.id}/${id}.${ext}`;
 
       const { error: insertError } = await supabase.from("videos").insert({
         id,
         owner_id: user.id,
-        title: title.trim() || "Untitled recording",
+        title: recTitle,
         storage_path: path,
         duration_seconds: duration,
         status: "uploading",
@@ -631,7 +638,36 @@ export default function Recorder() {
 
       let uploadError: { message: string } | null = null;
       for (let attempt = 0; attempt < 3; attempt++) {
-        if (r2) {
+        if (dest === "drive") {
+          try {
+            const start = await fetch("/api/drive/upload", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id, mime: result.mime, size: result.blob.size, title: recTitle }),
+            });
+            if (!start.ok) {
+              const j = (await start.json().catch(() => null)) as { error?: string } | null;
+              uploadError = { message: j?.error || "Could not start the Google Drive upload." };
+              if (start.status === 409 || start.status === 501) break; // reconnecting is the only fix
+            } else {
+              const { sessionUri, contentType } = (await start.json()) as { sessionUri: string; contentType: string };
+              const put = await fetch(sessionUri, { method: "PUT", headers: { "Content-Type": contentType }, body: result.blob });
+              const file = put.ok ? ((await put.json().catch(() => null)) as { id?: string } | null) : null;
+              if (!file?.id) {
+                uploadError = { message: `Google Drive upload failed (${put.status})` };
+              } else {
+                const fin = await fetch("/api/drive/finalize", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ id, fileId: file.id }),
+                });
+                uploadError = fin.ok ? null : { message: "Saved to Drive, but could not link the recording." };
+              }
+            }
+          } catch {
+            uploadError = { message: "Upload failed. Check your connection and try again." };
+          }
+        } else if (r2) {
           try {
             const put = await fetch(r2.url, { method: "PUT", headers: { "Content-Type": r2.contentType }, body: result.blob });
             uploadError = put.ok ? null : { message: `Upload failed (${put.status})` };
@@ -1007,6 +1043,7 @@ export default function Recorder() {
               Re-record
             </button>
           </div>
+          {dest === "drive" && <p className="mt-2.5 text-center text-xs text-muted">Saves to your Google Drive.</p>}
         </div>
       ) : null}
     </div>

@@ -25,7 +25,7 @@ export default async function EmbedPage({ params }: { params: Promise<{ id: stri
   }
 
   const { data: video } = await supabase.from("videos").select("storage_path").eq("id", id).maybeSingle();
-  const signedUrl = video?.storage_path ? await videoUrl(supabase, video.storage_path, 60 * 60 * 6) : null;
+  const signedUrl = video?.storage_path ? await videoUrl(supabase, video.storage_path, 60 * 60 * 6, undefined, id) : null;
   if (!signedUrl) notFound();
 
   return (

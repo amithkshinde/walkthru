@@ -115,9 +115,9 @@ export default async function VideoPage({ params }: Params) {
   const isOwner = !!user && user.id === video.owner_id;
 
   const [playSigned, dlSigned, { data: comments }, { data: reactions }] = await Promise.all([
-    videoUrl(supabase, video.storage_path, 60 * 60 * 6),
+    videoUrl(supabase, video.storage_path, 60 * 60 * 6, undefined, video.id),
     video.allow_download || isOwner
-      ? videoUrl(supabase, video.storage_path, 60 * 60 * 6, fileSlug(video.title, video.storage_path))
+      ? videoUrl(supabase, video.storage_path, 60 * 60 * 6, fileSlug(video.title, video.storage_path), video.id)
       : Promise.resolve(null),
     supabase
       .from("comments")

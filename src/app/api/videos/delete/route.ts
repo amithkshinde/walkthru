@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { UUID } from "@/lib/video-access";
 import { isR2Path, r2Delete, r2Key } from "@/lib/r2";
+import { accessTokenFor, deleteFiles, driveFileId, isDrivePath } from "@/lib/drive";
 
 /** Deletes the owner's recordings: files in R2 or Supabase, the thumbnail, then the database rows. */
 export async function POST(request: Request) {
@@ -28,7 +29,16 @@ export async function POST(request: Request) {
   if (!videos?.length) return NextResponse.json({ ok: true, deleted: 0 });
 
   const r2Keys = videos.flatMap((v) => (isR2Path(v.storage_path) ? [r2Key(v.storage_path)] : []));
-  const supaFiles = videos.flatMap((v) => [v.storage_path && !isR2Path(v.storage_path) ? v.storage_path : null, v.thumbnail_path]).filter((x): x is string => !!x);
+  const driveIds = videos.flatMap((v) => (isDrivePath(v.storage_path) && v.storage_path !== "gdrive:pending" ? [driveFileId(v.storage_path)] : []));
+  const supaFiles = videos
+    .flatMap((v) => [v.storage_path && !isR2Path(v.storage_path) && !isDrivePath(v.storage_path) ? v.storage_path : null, v.thumbnail_path])
+    .filter((x): x is string => !!x);
+
+  if (driveIds.length) {
+    const { data: conn } = await supabase.from("drive_connections").select("refresh_token_enc").eq("user_id", user.id).maybeSingle();
+    const access = conn ? await accessTokenFor(conn.refresh_token_enc) : null;
+    if (access) await deleteFiles(access, driveIds);
+  }
 
   if (r2Keys.length) await r2Delete(r2Keys);
   if (supaFiles.length) await supabase.storage.from("recordings").remove(supaFiles);
