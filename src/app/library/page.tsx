@@ -4,6 +4,7 @@ import { Eye, MessageSquare, Video } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppNav from "@/components/app-nav";
 import VideoCardActions from "@/components/video-card-actions";
+import StoragePanel from "@/components/storage-panel";
 import FolderBar from "@/components/folder-bar";
 import { formatTime, timeAgo } from "@/lib/format";
 
@@ -55,6 +56,10 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
               </p>
             )}
           </div>
+          <StoragePanel
+            userId={user.id}
+            items={(videos ?? []).map((v) => ({ id: v.id, title: v.title, storage_path: v.storage_path, thumbnail_path: v.thumbnail_path, duration_seconds: v.duration_seconds, created_at: v.created_at }))}
+          />
         </div>
 
         <FolderBar folders={folders ?? []} active={folder ?? null} q={q ?? ""} />
