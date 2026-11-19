@@ -27,12 +27,27 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Visitors with no session cookie need no network round trip. For everyone else, never let a slow
+  // or waking database stall the page: after 4s let the request through and let the page check auth.
+  const hasSession = request.cookies.getAll().some((c) => c.name.startsWith("sb-"));
+  let user: { id: string } | null = null;
+  let timedOut = false;
+  if (hasSession) {
+    user = await Promise.race([
+      supabase.auth.getUser().then((r) => r.data.user),
+      new Promise<null>((resolve) =>
+        setTimeout(() => {
+          timedOut = true;
+          resolve(null);
+        }, 4000),
+      ),
+    ]).catch(() => null);
+  }
 
   const path = request.nextUrl.pathname;
   const needsAuth = PROTECTED.some((p) => path === p || path.startsWith(p + "/"));
+
+  if (timedOut) return response;
 
   if (!user && needsAuth) {
     const url = request.nextUrl.clone();
